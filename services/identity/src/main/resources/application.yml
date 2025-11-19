@@ -1,0 +1,19 @@
+server:
+  port: ${IDENTITY_PORT:8081}
+
+spring:
+  application:
+    name: identity
+  datasource:
+    url: ${IDENTITY_DB_URL:jdbc:postgresql://localhost:5432/ridego_identity}
+    username: ${POSTGRES_USER:ridepostgres}
+    password: ${POSTGRES_PASSWORD:ridepostgres}
+  flyway:
+    enabled: true
+
+ridego:
+  jwt:
+    secret: ${JWT_SECRET:ridejwt-ridego-local-dev-secret-32bytes}
+    ttl-seconds: ${JWT_TTL_SECONDS:3600}
+  seed:
+    enabled: ${RIDEGO_SEED_ENABLED:true}
