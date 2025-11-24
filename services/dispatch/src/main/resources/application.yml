@@ -1,0 +1,37 @@
+server:
+  port: ${DISPATCH_PORT:8083}
+
+spring:
+  application:
+    name: dispatch
+  datasource:
+    url: ${DISPATCH_DB_URL:jdbc:postgresql://localhost:5432/ridego_dispatch}
+    username: ${POSTGRES_USER:ridepostgres}
+    password: ${POSTGRES_PASSWORD:ridepostgres}
+  flyway:
+    enabled: true
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9094}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+    consumer:
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:rideredis}
+
+ridego:
+  location:
+    url: ${LOCATION_URL:http://localhost:8084}
+  matching:
+    offer-ttl-seconds: ${OFFER_TTL_SECONDS:10}
+    radius-km: ${MATCH_RADIUS_KM:3}
+    candidate-limit: ${MATCH_CANDIDATE_LIMIT:50}
+    expiry-scan-ms: ${OFFER_EXPIRY_SCAN_MS:1000}
+  outbox:
+    poll-interval-ms: ${OUTBOX_POLL_INTERVAL_MS:500}

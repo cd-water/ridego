@@ -1,0 +1,26 @@
+spring:
+  application:
+    name: simulator
+  main:
+    web-application-type: none
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9094}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+
+ridego:
+  gateway-url: ${GATEWAY_URL:http://localhost:8080/api/v1}
+  simulator:
+    city-id: ${SIM_CITY_ID:city-1}
+    rider:
+      username: ${SIM_RIDER_USERNAME:rider1}
+      password: ${SIM_RIDER_PASSWORD:ridego}
+    driver:
+      username: ${SIM_DRIVER_USERNAME:driver1}
+      password: ${SIM_DRIVER_PASSWORD:ridego}
+    pickup-lat: ${SIM_PICKUP_LAT:31.2304}
+    pickup-lng: ${SIM_PICKUP_LNG:121.4737}
+    dropoff-lat: ${SIM_DROPOFF_LAT:31.2400}
+    dropoff-lng: ${SIM_DROPOFF_LNG:121.4900}
+    offer-timeout-seconds: ${SIM_OFFER_TIMEOUT_SECONDS:20}

@@ -33,4 +33,10 @@ public class ApiExceptionHandler {
     public Map<String, String> badRequest(BadRequestException e) {
         return Map.of("error", e.getMessage());
     }
+
+    @ExceptionHandler(ConflictException.class)
+    @ResponseStatus(HttpStatus.CONFLICT)
+    public Map<String, String> conflict(ConflictException e) {
+        return Map.of("error", e.getMessage());
+    }
 }

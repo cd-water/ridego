@@ -44,10 +44,47 @@ public class TripController {
     @GetMapping("/{id}")
     public TripView get(
             @RequestHeader(name = InternalHeaders.USER_ID, required = false) String userId,
+            @RequestHeader(name = InternalHeaders.DRIVER_ID, required = false) String driverId,
             @PathVariable UUID id) {
         if (userId == null) {
             throw new UnauthorizedException();
         }
-        return tripService.get(userId, id);
+        return tripService.get(userId, driverId, id);
+    }
+
+    @PostMapping("/{id}/arrive")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void arrive(@PathVariable UUID id,
+                       @RequestHeader(name = InternalHeaders.DRIVER_ID, required = false) String driverId,
+                       @RequestHeader(name = InternalHeaders.ROLE, required = false) String role) {
+        requireDriver(driverId, role);
+        tripService.arrive(id, driverId);
+    }
+
+    @PostMapping("/{id}/start")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void start(@PathVariable UUID id,
+                      @RequestHeader(name = InternalHeaders.DRIVER_ID, required = false) String driverId,
+                      @RequestHeader(name = InternalHeaders.ROLE, required = false) String role) {
+        requireDriver(driverId, role);
+        tripService.start(id, driverId);
+    }
+
+    @PostMapping("/{id}/complete")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void complete(@PathVariable UUID id,
+                         @RequestHeader(name = InternalHeaders.DRIVER_ID, required = false) String driverId,
+                         @RequestHeader(name = InternalHeaders.ROLE, required = false) String role) {
+        requireDriver(driverId, role);
+        tripService.complete(id, driverId);
+    }
+
+    private void requireDriver(String driverId, String role) {
+        if (driverId == null) {
+            throw new UnauthorizedException();
+        }
+        if (!Roles.DRIVER.equals(role)) {
+            throw new ForbiddenException();
+        }
     }
 }

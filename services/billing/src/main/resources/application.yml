@@ -1,0 +1,25 @@
+server:
+  port: ${BILLING_PORT:8085}
+
+spring:
+  application:
+    name: billing
+  datasource:
+    url: ${BILLING_DB_URL:jdbc:postgresql://localhost:5432/ridego_billing}
+    username: ${POSTGRES_USER:ridepostgres}
+    password: ${POSTGRES_PASSWORD:ridepostgres}
+  flyway:
+    enabled: true
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9094}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+    consumer:
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+
+ridego:
+  outbox:
+    poll-interval-ms: ${OUTBOX_POLL_INTERVAL_MS:500}

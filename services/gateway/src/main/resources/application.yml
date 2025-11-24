@@ -27,6 +27,24 @@ spring:
                 - Path=/api/v1/shared/**
               filters:
                 - StripPrefix=2
+            - id: offers
+              uri: ${DISPATCH_URI:http://localhost:8083}
+              predicates:
+                - Path=/api/v1/offers/**
+              filters:
+                - StripPrefix=2
+            - id: drivers
+              uri: ${LOCATION_URI:http://localhost:8084}
+              predicates:
+                - Path=/api/v1/drivers/**
+              filters:
+                - StripPrefix=2
+            - id: invoices
+              uri: ${BILLING_URI:http://localhost:8085}
+              predicates:
+                - Path=/api/v1/invoices/**
+              filters:
+                - StripPrefix=2
 
 ridego:
   jwt:

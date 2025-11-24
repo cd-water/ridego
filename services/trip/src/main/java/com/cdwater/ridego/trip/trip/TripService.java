@@ -2,10 +2,14 @@ package com.cdwater.ridego.trip.trip;
 
 import com.cdwater.ridego.contracts.EventEnvelope;
 import com.cdwater.ridego.contracts.EventTypes;
+import com.cdwater.ridego.contracts.TripCompletedPayload;
+import com.cdwater.ridego.contracts.TripDriverPayload;
 import com.cdwater.ridego.contracts.TripRequestedPayload;
 import com.cdwater.ridego.trip.domain.TripState;
 import com.cdwater.ridego.trip.outbox.OutboxRepository;
 import com.cdwater.ridego.trip.web.BadRequestException;
+import com.cdwater.ridego.trip.web.ConflictException;
+import com.cdwater.ridego.trip.web.ForbiddenException;
 import com.cdwater.ridego.trip.web.TripNotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,10 +24,12 @@ public class TripService {
 
     private final TripRepository trips;
     private final OutboxRepository outbox;
+    private final TripEvents events;
 
-    public TripService(TripRepository trips, OutboxRepository outbox) {
+    public TripService(TripRepository trips, OutboxRepository outbox, TripEvents events) {
         this.trips = trips;
         this.outbox = outbox;
+        this.events = events;
     }
 
     @Transactional
@@ -58,12 +64,64 @@ public class TripService {
         return new TripResponse(id.toString(), TripState.REQUESTED.wireValue());
     }
 
-    public TripView get(String riderId, UUID id) {
+    public TripView get(String userId, String driverId, UUID id) {
         TripView view = trips.findReadModel(id).orElseThrow(TripNotFoundException::new);
-        if (!view.riderId().equals(riderId)) {
+        boolean allowed = view.riderId().equals(userId)
+                || (driverId != null && driverId.equals(view.driverId()));
+        if (!allowed) {
             throw new TripNotFoundException();
         }
         return view;
+    }
+
+    @Transactional
+    public void arrive(UUID id, String driverId) {
+        TripRecord trip = requireDriverState(id, driverId, "accepted");
+        if (trips.updateToArrived(id, "accepted") == 0) {
+            throw new ConflictException("trip is no longer accepted");
+        }
+        events.append(EventTypes.TRIP_ARRIVED, trip,
+                new TripDriverPayload(id.toString(), driverId));
+    }
+
+    @Transactional
+    public void start(UUID id, String driverId) {
+        TripRecord trip = requireDriverState(id, driverId, "arrived");
+        if (trips.updateToStarted(id, "arrived") == 0) {
+            throw new ConflictException("trip is no longer arrived");
+        }
+        events.append(EventTypes.TRIP_STARTED, trip,
+                new TripDriverPayload(id.toString(), driverId));
+    }
+
+    @Transactional
+    public void complete(UUID id, String driverId) {
+        TripRecord trip = requireDriverState(id, driverId, "in_progress");
+        if (trips.updateToCompleted(id, "in_progress") == 0) {
+            throw new ConflictException("trip is no longer in progress");
+        }
+        Instant completedAt = Instant.now();
+        events.append(EventTypes.TRIP_COMPLETED, trip, new TripCompletedPayload(
+                trip.id().toString(),
+                trip.riderId(),
+                driverId,
+                trip.startedAt(),
+                completedAt,
+                trip.pickupLat(),
+                trip.pickupLng(),
+                trip.dropoffLat(),
+                trip.dropoffLng()));
+    }
+
+    private TripRecord requireDriverState(UUID id, String driverId, String expectedState) {
+        TripRecord trip = trips.find(id).orElseThrow(TripNotFoundException::new);
+        if (!driverId.equals(trip.driverId())) {
+            throw new ForbiddenException();
+        }
+        if (!expectedState.equals(trip.state())) {
+            throw new ConflictException("trip state is " + trip.state() + ", expected " + expectedState);
+        }
+        return trip;
     }
 
     private void validate(CreateTripRequest request) {

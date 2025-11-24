@@ -16,6 +16,9 @@
         <module>gateway</module>
         <module>identity</module>
         <module>trip</module>
+        <module>location</module>
+        <module>dispatch</module>
+        <module>billing</module>
     </modules>
 
 </project>
