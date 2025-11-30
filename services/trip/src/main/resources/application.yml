@@ -21,5 +21,8 @@ spring:
       value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
 
 ridego:
+  matching:
+    window-seconds: ${MATCHING_WINDOW_SECONDS:90}
+    scan-ms: ${MATCHING_SCAN_MS:1000}
   outbox:
     poll-interval-ms: ${OUTBOX_POLL_INTERVAL_MS:500}

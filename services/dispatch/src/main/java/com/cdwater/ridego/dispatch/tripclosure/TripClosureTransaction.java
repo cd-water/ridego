@@ -28,15 +28,27 @@ public class TripClosureTransaction {
     }
 
     @Transactional
+    public void releaseAccepted(UUID offerId, String driverId) {
+        offers.release(offerId);
+        availability.release(driverId);
+        redis.delete(MatchingTransaction.claimKey(driverId));
+    }
+
+    @Transactional
+    public void releaseDriver(UUID tripId, String driverId) {
+        offers.releaseForTripAndDriver(tripId, driverId);
+        availability.release(driverId);
+        redis.delete(MatchingTransaction.claimKey(driverId));
+    }
+
+    @Transactional
     public void close(UUID tripId, String completedDriverId) {
         Set<String> drivers = new HashSet<>();
         if (completedDriverId != null) {
             drivers.add(completedDriverId);
         }
         for (Offer offer : offers.findActiveForTrip(tripId)) {
-            if ("PENDING".equals(offer.state())) {
-                offers.expire(offer.id());
-            }
+            offers.release(offer.id());
             drivers.add(offer.driverId());
         }
 

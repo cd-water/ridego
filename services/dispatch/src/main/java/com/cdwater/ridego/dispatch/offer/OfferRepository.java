@@ -94,4 +94,28 @@ public class OfferRepository {
                         """,
                 id);
     }
+
+    public int release(UUID id) {
+        return jdbc.update("""
+                        UPDATE offers SET state = 'RELEASED', responded_at = now()
+                        WHERE id = ? AND state IN ('PENDING', 'ACCEPTED')
+                        """,
+                id);
+    }
+
+    public int releaseForTripAndDriver(UUID tripId, String driverId) {
+        return jdbc.update("""
+                        UPDATE offers SET state = 'RELEASED', responded_at = now()
+                        WHERE trip_id = ? AND driver_id = ? AND state IN ('PENDING', 'ACCEPTED')
+                        """,
+                tripId, driverId);
+    }
+
+    public java.util.Set<String> attemptedDrivers(UUID tripId) {
+        return new java.util.HashSet<>(jdbc.queryForList("""
+                        SELECT DISTINCT driver_id FROM offers
+                        WHERE trip_id = ? AND state IN ('EXPIRED', 'REJECTED', 'RELEASED')
+                        """,
+                String.class, tripId));
+    }
 }

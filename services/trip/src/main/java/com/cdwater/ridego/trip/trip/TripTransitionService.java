@@ -5,9 +5,11 @@ import com.cdwater.ridego.contracts.OfferLifecyclePayload;
 import com.cdwater.ridego.contracts.TripDriverPayload;
 import com.cdwater.ridego.contracts.TripLifecyclePayload;
 import com.cdwater.ridego.contracts.TripOfferedPayload;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.util.UUID;
 
 @Service
@@ -15,10 +17,14 @@ public class TripTransitionService {
 
     private final TripRepository trips;
     private final TripEvents events;
+    private final long matchingWindowSeconds;
 
-    public TripTransitionService(TripRepository trips, TripEvents events) {
+    public TripTransitionService(TripRepository trips,
+                                 TripEvents events,
+                                 @Value("${ridego.matching.window-seconds:90}") long matchingWindowSeconds) {
         this.trips = trips;
         this.events = events;
+        this.matchingWindowSeconds = matchingWindowSeconds;
     }
 
     @Transactional
@@ -53,24 +59,31 @@ public class TripTransitionService {
         if (trip == null || !"offered".equals(trip.state())) {
             return;
         }
-        if (trips.updateToMatchingRestarted(trip.id(), "offered") == 0) {
+        Instant deadline = Instant.now().plusSeconds(matchingWindowSeconds);
+        if (trips.updateToMatchingForRedispatch(trip.id(), "offered", deadline) == 0) {
             return;
         }
-        events.append(EventTypes.TRIP_MATCHING_RESTARTED, trip,
-                new TripLifecyclePayload(payload.tripId()));
+        events.append(EventTypes.TRIP_MATCHING_RESTARTED, trip, events.requestedPayload(trip));
     }
 
     @Transactional
     public void offerAccepted(OfferLifecyclePayload payload) {
         TripRecord trip = find(payload.tripId());
-        if (trip == null || !"offered".equals(trip.state())) {
+        if (trip == null) {
             return;
         }
-        if (trips.updateToAccepted(trip.id(), "offered") == 0) {
+        if ("offered".equals(trip.state())) {
+            if (trips.updateToAccepted(trip.id(), "offered") == 0) {
+                return;
+            }
+            events.append(EventTypes.TRIP_ACCEPTED, trip,
+                    new TripDriverPayload(payload.tripId(), payload.driverId()));
             return;
         }
-        events.append(EventTypes.TRIP_ACCEPTED, trip,
-                new TripDriverPayload(payload.tripId(), payload.driverId()));
+        if ("accepted".equals(trip.state())) {
+            return;
+        }
+        events.append(EventTypes.TRIP_ACCEPT_REJECTED, trip, payload);
     }
 
     private TripRecord find(String tripId) {

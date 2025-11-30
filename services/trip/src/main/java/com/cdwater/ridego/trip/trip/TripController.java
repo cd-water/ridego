@@ -52,6 +52,19 @@ public class TripController {
         return tripService.get(userId, driverId, id);
     }
 
+    @PostMapping("/{id}/cancel")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void cancel(@PathVariable UUID id,
+                       @RequestHeader(name = InternalHeaders.USER_ID, required = false) String userId,
+                       @RequestHeader(name = InternalHeaders.DRIVER_ID, required = false) String driverId,
+                       @RequestBody(required = false) CancelTripRequest request) {
+        if (userId == null && driverId == null) {
+            throw new UnauthorizedException();
+        }
+        String reason = request == null ? null : request.reason();
+        tripService.cancel(id, userId, driverId, reason);
+    }
+
     @PostMapping("/{id}/arrive")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void arrive(@PathVariable UUID id,

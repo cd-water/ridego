@@ -11,6 +11,8 @@ public final class EventTypes {
     public static final String TRIP_STARTED = "TripStarted";
     public static final String TRIP_COMPLETED = "TripCompleted";
     public static final String TRIP_CANCELLED = "TripCancelled";
+    public static final String TRIP_DRIVER_CANCELLED = "TripDriverCancelled";
+    public static final String TRIP_ACCEPT_REJECTED = "TripAcceptRejected";
     public static final String TRIP_UNMATCHED = "TripUnmatched";
 
     public static final String MATCHING_STARTED = "MatchingStarted";

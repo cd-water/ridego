@@ -57,9 +57,13 @@ public class MatchingTransaction {
         UUID tripId = UUID.fromString(trip.tripId());
         Instant now = Instant.now();
         Instant expiresAt = now.plus(claimTtl);
+        var excluded = offers.attemptedDrivers(tripId);
 
         for (LocationClient.NearbyDriver candidate : candidates) {
             String driverId = candidate.driverId();
+            if (excluded.contains(driverId)) {
+                continue;
+            }
             if (!availability.isIdle(driverId, trip.cityId())) {
                 continue;
             }

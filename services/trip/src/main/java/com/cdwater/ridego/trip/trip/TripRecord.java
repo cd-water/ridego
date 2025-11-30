@@ -14,6 +14,7 @@ public record TripRecord(
         double dropoffLat,
         double dropoffLng,
         Instant requestedAt,
+        Instant matchingDeadline,
         Instant acceptedAt,
         Instant arrivedAt,
         Instant startedAt,

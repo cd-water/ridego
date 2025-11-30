@@ -57,7 +57,8 @@ public class TripProjectionListener {
         String driverId = payload.hasNonNull("driverId") ? payload.get("driverId").asText() : null;
         UUID tripId = UUID.fromString(event.aggregateId());
 
-        if (EventTypes.TRIP_MATCHING_RESTARTED.equals(event.eventType())) {
+        if (EventTypes.TRIP_MATCHING_RESTARTED.equals(event.eventType())
+                || EventTypes.TRIP_DRIVER_CANCELLED.equals(event.eventType())) {
             jdbc.update("""
                             UPDATE trip_read SET state = ?, driver_id = NULL, updated_at = now()
                             WHERE id = ?
@@ -95,6 +96,7 @@ public class TripProjectionListener {
             case EventTypes.TRIP_MATCHING_STARTED -> "matching";
             case EventTypes.TRIP_OFFERED -> "offered";
             case EventTypes.TRIP_MATCHING_RESTARTED -> "matching";
+            case EventTypes.TRIP_DRIVER_CANCELLED -> "matching";
             case EventTypes.TRIP_ACCEPTED -> "accepted";
             case EventTypes.TRIP_ARRIVED -> "arrived";
             case EventTypes.TRIP_STARTED -> "in_progress";

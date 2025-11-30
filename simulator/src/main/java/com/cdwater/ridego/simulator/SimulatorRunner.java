@@ -24,6 +24,8 @@ public class SimulatorRunner implements ApplicationRunner {
     private final KafkaTemplate<String, String> kafkaTemplate;
     private final ObjectMapper objectMapper;
 
+    @Value("${ridego.simulator.scenario:happy}")
+    private String scenario;
     @Value("${ridego.simulator.city-id:city-1}")
     private String cityId;
     @Value("${ridego.simulator.rider.username:rider1}")
@@ -56,7 +58,11 @@ public class SimulatorRunner implements ApplicationRunner {
     @Override
     public void run(ApplicationArguments args) {
         try {
-            runTrip();
+            switch (scenario) {
+                case "cancel" -> runCancelScenario();
+                case "timeout" -> runTimeoutScenario();
+                default -> runHappyPath();
+            }
             System.exit(0);
         } catch (Exception e) {
             log.error("simulation failed", e);
@@ -64,7 +70,66 @@ public class SimulatorRunner implements ApplicationRunner {
         }
     }
 
-    private void runTrip() throws Exception {
+    private void runHappyPath() throws Exception {
+        Session session = prepare();
+        String tripId = createTrip(session.riderToken());
+        log.info("trip {} requested", tripId);
+
+        String offerId = waitForOffer(session.driverToken());
+        log.info("driver accepted offer {}", offerId);
+        post(session.driverToken(), "/offers/" + offerId + "/accept", Map.of());
+
+        Thread.sleep(1500);
+        post(session.driverToken(), "/trips/" + tripId + "/arrive", Map.of());
+        post(session.driverToken(), "/trips/" + tripId + "/start", Map.of());
+        log.info("trip {} in progress", tripId);
+
+        Thread.sleep(1000);
+        post(session.driverToken(), "/trips/" + tripId + "/complete", Map.of());
+
+        JsonNode completed = waitForState(session.riderToken(), tripId, "completed", 20);
+        log.info("trip {} completed: {}", tripId, completed);
+
+        JsonNode invoice = waitForInvoice(session.riderToken(), tripId);
+        log.info("invoice for trip {}: amount={} state={}",
+                tripId, invoice.get("amountCents").asInt(), invoice.get("state").asText());
+        log.info("happy path OK");
+    }
+
+    private void runCancelScenario() throws Exception {
+        Session session = prepare();
+        String tripId = createTrip(session.riderToken());
+        String offerId = waitForOffer(session.driverToken());
+        post(session.driverToken(), "/offers/" + offerId + "/accept", Map.of());
+        waitForState(session.riderToken(), tripId, "accepted", 20);
+        log.info("trip {} accepted, rider cancels", tripId);
+
+        cancel(session.riderToken(), tripId, "rider_changed_mind");
+        waitForState(session.riderToken(), tripId, "cancelled", 20);
+        log.info("trip {} cancelled", tripId);
+
+        Thread.sleep(1000);
+        String secondTrip = createTrip(session.riderToken());
+        String secondOffer = waitForOffer(session.driverToken());
+        log.info("driver released and re-offered on trip {} (offer {})", secondTrip, secondOffer);
+        post(session.driverToken(), "/offers/" + secondOffer + "/accept", Map.of());
+        cancel(session.riderToken(), secondTrip, "cleanup");
+        waitForState(session.riderToken(), secondTrip, "cancelled", 20);
+        log.info("cancel scenario OK");
+    }
+
+    private void runTimeoutScenario() throws Exception {
+        Session session = prepare();
+        String tripId = createTrip(session.riderToken());
+        String offerId = waitForOffer(session.driverToken());
+        log.info("trip {} offered to driver ({}), driver ignores it", tripId, offerId);
+
+        waitForState(session.riderToken(), tripId, "unmatched", 90);
+        log.info("trip {} unmatched after matching window", tripId);
+        log.info("timeout scenario OK");
+    }
+
+    private Session prepare() throws Exception {
         JsonNode rider = login(riderUsername, riderPassword);
         JsonNode driver = login(driverUsername, driverPassword);
 
@@ -78,36 +143,14 @@ public class SimulatorRunner implements ApplicationRunner {
         kafkaTemplate.send(Topics.DRIVER_POSITIONS, driverId, objectMapper.writeValueAsString(
                 Map.of("driverId", driverId, "cityId", cityId, "lat", pickupLat, "lng", pickupLng)));
         Thread.sleep(1500);
+        return new Session(riderToken, driverToken);
+    }
 
-        String tripId = postForJson(riderToken, "/trips", Map.of(
+    private String createTrip(String riderToken) {
+        return postForJson(riderToken, "/trips", Map.of(
                 "cityId", cityId,
                 "pickupLat", pickupLat, "pickupLng", pickupLng,
                 "dropoffLat", dropoffLat, "dropoffLng", dropoffLng)).get("tripId").asText();
-        log.info("trip {} requested", tripId);
-
-        String offerId = waitForOffer(driverToken);
-        log.info("driver accepted offer {}", offerId);
-        post(driverToken, "/offers/" + offerId + "/accept", Map.of());
-
-        Thread.sleep(1500);
-        post(driverToken, "/trips/" + tripId + "/arrive", Map.of());
-        post(driverToken, "/trips/" + tripId + "/start", Map.of());
-        log.info("trip {} in progress", tripId);
-
-        Thread.sleep(1000);
-        post(driverToken, "/trips/" + tripId + "/complete", Map.of());
-
-        JsonNode completed = waitForState(riderToken, tripId, "completed");
-        log.info("trip {} completed: {}", tripId, completed);
-
-        JsonNode invoice = waitForInvoice(riderToken, tripId);
-        log.info("invoice for trip {}: amount={} state={}",
-                tripId, invoice.get("amountCents").asInt(), invoice.get("state").asText());
-        log.info("simulation OK");
-    }
-
-    private JsonNode login(String username, String password) {
-        return postForJson(null, "/auth/login", Map.of("username", username, "password", password));
     }
 
     private String waitForOffer(String driverToken) throws InterruptedException {
@@ -122,8 +165,9 @@ public class SimulatorRunner implements ApplicationRunner {
         throw new IllegalStateException("no offer within " + offerTimeoutSeconds + "s");
     }
 
-    private JsonNode waitForState(String token, String tripId, String expected) throws InterruptedException {
-        long deadline = System.currentTimeMillis() + 20_000L;
+    private JsonNode waitForState(String token, String tripId, String expected, int timeoutSeconds)
+            throws InterruptedException {
+        long deadline = System.currentTimeMillis() + timeoutSeconds * 1000L;
         while (System.currentTimeMillis() < deadline) {
             JsonNode trip = getJson(token, "/trips/" + tripId);
             if (expected.equals(trip.get("state").asText())) {
@@ -131,7 +175,7 @@ public class SimulatorRunner implements ApplicationRunner {
             }
             Thread.sleep(300);
         }
-        throw new IllegalStateException("trip did not reach state " + expected);
+        throw new IllegalStateException("trip did not reach state " + expected + " within " + timeoutSeconds + "s");
     }
 
     private JsonNode waitForInvoice(String token, String tripId) throws InterruptedException {
@@ -146,6 +190,10 @@ public class SimulatorRunner implements ApplicationRunner {
         throw new IllegalStateException("invoice not found within 10s");
     }
 
+    private JsonNode login(String username, String password) {
+        return postForJson(null, "/auth/login", Map.of("username", username, "password", password));
+    }
+
     private JsonNode postForJson(String token, String path, Object body) {
         RestClient.RequestBodySpec request = http.post().uri(path)
                 .header("Content-Type", "application/json");
@@ -157,10 +205,16 @@ public class SimulatorRunner implements ApplicationRunner {
     }
 
     private void post(String token, String path, Object body) {
-        RestClient.RequestBodySpec request = http.post().uri(path)
+        http.post().uri(path)
                 .header("Authorization", "Bearer " + token)
-                .header("Content-Type", "application/json");
-        request.body(body).retrieve().toBodilessEntity();
+                .header("Content-Type", "application/json")
+                .body(body)
+                .retrieve()
+                .toBodilessEntity();
+    }
+
+    private void cancel(String token, String tripId, String reason) {
+        post(token, "/trips/" + tripId + "/cancel", Map.of("reason", reason));
     }
 
     private JsonNode getJson(String token, String path) {
@@ -169,5 +223,8 @@ public class SimulatorRunner implements ApplicationRunner {
                 .retrieve()
                 .body(String.class);
         return objectMapper.readTree(response);
+    }
+
+    private record Session(String riderToken, String driverToken) {
     }
 }

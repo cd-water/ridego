@@ -12,6 +12,7 @@ spring:
 ridego:
   gateway-url: ${GATEWAY_URL:http://localhost:8080/api/v1}
   simulator:
+    scenario: ${SIM_SCENARIO:happy}
     city-id: ${SIM_CITY_ID:city-1}
     rider:
       username: ${SIM_RIDER_USERNAME:rider1}

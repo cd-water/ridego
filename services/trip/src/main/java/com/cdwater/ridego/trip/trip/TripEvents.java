@@ -2,6 +2,7 @@ package com.cdwater.ridego.trip.trip;
 
 import com.cdwater.ridego.contracts.EventEnvelope;
 import com.cdwater.ridego.contracts.Topics;
+import com.cdwater.ridego.contracts.TripRequestedPayload;
 import com.cdwater.ridego.trip.outbox.OutboxRepository;
 import org.springframework.stereotype.Component;
 
@@ -29,5 +30,16 @@ public class TripEvents {
                 null,
                 payload);
         outbox.append(Topics.TRIP_EVENTS, trip.id().toString(), event);
+    }
+
+    public TripRequestedPayload requestedPayload(TripRecord trip) {
+        return new TripRequestedPayload(
+                trip.id().toString(),
+                trip.riderId(),
+                trip.cityId(),
+                trip.pickupLat(),
+                trip.pickupLng(),
+                trip.dropoffLat(),
+                trip.dropoffLng());
     }
 }
