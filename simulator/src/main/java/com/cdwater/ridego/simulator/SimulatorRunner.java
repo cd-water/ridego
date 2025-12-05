@@ -3,6 +3,7 @@ package com.cdwater.ridego.simulator;
 import com.cdwater.ridego.contracts.Topics;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
@@ -23,6 +24,7 @@ public class SimulatorRunner implements ApplicationRunner {
     private final RestClient http;
     private final KafkaTemplate<String, String> kafkaTemplate;
     private final ObjectMapper objectMapper;
+    private final ObjectProvider<LoadSimulator> loadSimulator;
 
     @Value("${ridego.simulator.scenario:happy}")
     private String scenario;
@@ -46,13 +48,17 @@ public class SimulatorRunner implements ApplicationRunner {
     private double dropoffLng;
     @Value("${ridego.simulator.offer-timeout-seconds:20}")
     private int offerTimeoutSeconds;
+    @Value("${ridego.simulator.heartbeat-wait-seconds:45}")
+    private int heartbeatWaitSeconds;
 
     public SimulatorRunner(KafkaTemplate<String, String> kafkaTemplate,
                            ObjectMapper objectMapper,
+                           ObjectProvider<LoadSimulator> loadSimulator,
                            @Value("${ridego.gateway-url:http://localhost:8080/api/v1}") String gatewayUrl) {
         this.http = RestClient.create(gatewayUrl);
         this.kafkaTemplate = kafkaTemplate;
         this.objectMapper = objectMapper;
+        this.loadSimulator = loadSimulator;
     }
 
     @Override
@@ -61,6 +67,8 @@ public class SimulatorRunner implements ApplicationRunner {
             switch (scenario) {
                 case "cancel" -> runCancelScenario();
                 case "timeout" -> runTimeoutScenario();
+                case "heartbeat" -> runHeartbeatScenario();
+                case "load" -> loadSimulator.getObject().run();
                 default -> runHappyPath();
             }
             System.exit(0);
@@ -129,6 +137,17 @@ public class SimulatorRunner implements ApplicationRunner {
         log.info("timeout scenario OK");
     }
 
+    private void runHeartbeatScenario() throws Exception {
+        Session session = prepare();
+        log.info("driver will stop sending GPS; waiting {}s for heartbeat expiry",
+                heartbeatWaitSeconds);
+        Thread.sleep(heartbeatWaitSeconds * 1000L);
+
+        String tripId = createTrip(session.riderToken());
+        waitForState(session.riderToken(), tripId, "unmatched", 90);
+        log.info("trip {} unmatched; heartbeat expiry OK", tripId);
+    }
+
     private Session prepare() throws Exception {
         JsonNode rider = login(riderUsername, riderPassword);
         JsonNode driver = login(driverUsername, driverPassword);
@@ -169,9 +188,13 @@ public class SimulatorRunner implements ApplicationRunner {
             throws InterruptedException {
         long deadline = System.currentTimeMillis() + timeoutSeconds * 1000L;
         while (System.currentTimeMillis() < deadline) {
-            JsonNode trip = getJson(token, "/trips/" + tripId);
-            if (expected.equals(trip.get("state").asText())) {
-                return trip;
+            try {
+                JsonNode trip = getJson(token, "/trips/" + tripId);
+                if (expected.equals(trip.get("state").asText())) {
+                    return trip;
+                }
+            } catch (HttpClientErrorException.NotFound ignored) {
+                // read model projection has not caught up yet
             }
             Thread.sleep(300);
         }

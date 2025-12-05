@@ -8,6 +8,13 @@ spring:
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.apache.kafka.common.serialization.StringSerializer
+    consumer:
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      properties:
+        session.timeout.ms: 10000
+        heartbeat.interval.ms: 3000
 
 ridego:
   gateway-url: ${GATEWAY_URL:http://localhost:8080/api/v1}
@@ -25,3 +32,17 @@ ridego:
     dropoff-lat: ${SIM_DROPOFF_LAT:31.2400}
     dropoff-lng: ${SIM_DROPOFF_LNG:121.4900}
     offer-timeout-seconds: ${SIM_OFFER_TIMEOUT_SECONDS:20}
+    heartbeat-wait-seconds: ${SIM_HEARTBEAT_WAIT_SECONDS:45}
+    location-url: ${LOCATION_URL:http://localhost:8084}
+    dispatch-url: ${DISPATCH_URL:http://localhost:8083}
+    trip-url: ${TRIP_URL:http://localhost:8082}
+    load:
+      drivers: ${SIM_DRIVERS:10000}
+      gps-interval-seconds: ${SIM_GPS_INTERVAL_SECONDS:3}
+      trip-rate-per-minute: ${SIM_TRIP_RATE:100}
+      duration-minutes: ${SIM_DURATION_MINUTES:2}
+      pickup-lat: ${SIM_PICKUP_LAT:31.2304}
+      pickup-lng: ${SIM_PICKUP_LNG:121.4737}
+      dropoff-lat: ${SIM_DROPOFF_LAT:31.2400}
+      dropoff-lng: ${SIM_DROPOFF_LNG:121.4900}
+      in-progress-seconds: ${SIM_IN_PROGRESS_SECONDS:5}

@@ -4,8 +4,16 @@ server:
 spring:
   application:
     name: location
+  datasource:
+    url: ${LOCATION_DB_URL:jdbc:postgresql://localhost:5432/ridego_location}
+    username: ${POSTGRES_USER:ridepostgres}
+    password: ${POSTGRES_PASSWORD:ridepostgres}
+  flyway:
+    enabled: true
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9094}
+    listener:
+      concurrency: ${KAFKA_LISTENER_CONCURRENCY:12}
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.apache.kafka.common.serialization.StringSerializer
@@ -18,3 +26,10 @@ spring:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
       password: ${REDIS_PASSWORD:rideredis}
+
+ridego:
+  location:
+    heartbeat-timeout-seconds: ${HEARTBEAT_TIMEOUT_SECONDS:30}
+    heartbeat-scan-ms: ${HEARTBEAT_SCAN_MS:10000}
+  trail:
+    flush-ms: ${TRAIL_FLUSH_MS:1000}

@@ -20,6 +20,8 @@ public class DriverLocationService {
     private static final String GEO_KEY_PREFIX = "geo:drivers:";
     private static final String PRESENCE_KEY_PREFIX = "driver:presence:";
     private static final String LAST_SEEN_KEY_PREFIX = "driver:last_seen:";
+    private static final String CITY_KEY_PREFIX = "driver:city:";
+    private static final String ONLINE_SET = "drivers:online";
 
     private final StringRedisTemplate redis;
 
@@ -34,11 +36,29 @@ public class DriverLocationService {
 
     public void setPresence(String driverId, String cityId, boolean online) {
         redis.opsForValue().set(PRESENCE_KEY_PREFIX + driverId, online ? "online" : "offline");
+        redis.opsForValue().set(CITY_KEY_PREFIX + driverId, cityId);
         if (online) {
             redis.opsForValue().set(LAST_SEEN_KEY_PREFIX + driverId, Instant.now().toString());
+            redis.opsForSet().add(ONLINE_SET, driverId);
         } else {
+            redis.opsForSet().remove(ONLINE_SET, driverId);
             geo().remove(GEO_KEY_PREFIX + cityId, driverId);
         }
+    }
+
+    public java.util.Set<String> onlineDrivers() {
+        java.util.Set<String> members = redis.opsForSet().members(ONLINE_SET);
+        return members == null ? java.util.Set.of() : members;
+    }
+
+    public Instant lastSeen(String driverId) {
+        String value = redis.opsForValue().get(LAST_SEEN_KEY_PREFIX + driverId);
+        return value == null ? null : Instant.parse(value);
+    }
+
+    public String cityOf(String driverId) {
+        String cityId = redis.opsForValue().get(CITY_KEY_PREFIX + driverId);
+        return cityId == null ? "city-1" : cityId;
     }
 
     public List<NearbyDriver> nearby(String cityId, double lat, double lng, double radiusKm, int limit) {
