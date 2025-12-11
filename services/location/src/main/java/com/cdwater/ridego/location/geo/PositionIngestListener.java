@@ -3,6 +3,8 @@ package com.cdwater.ridego.location.geo;
 import com.cdwater.ridego.contracts.Topics;
 import com.cdwater.ridego.location.trail.TripPosition;
 import com.cdwater.ridego.location.trail.TripTrailBuffer;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.JsonNode;
@@ -18,15 +20,18 @@ public class PositionIngestListener {
     private final DriverLocationService locationService;
     private final ActiveTripRegistry activeTrips;
     private final TripTrailBuffer trailBuffer;
+    private final Counter positionsIngested;
 
     public PositionIngestListener(ObjectMapper objectMapper,
                                   DriverLocationService locationService,
                                   ActiveTripRegistry activeTrips,
-                                  TripTrailBuffer trailBuffer) {
+                                  TripTrailBuffer trailBuffer,
+                                  MeterRegistry meterRegistry) {
         this.objectMapper = objectMapper;
         this.locationService = locationService;
         this.activeTrips = activeTrips;
         this.trailBuffer = trailBuffer;
+        this.positionsIngested = Counter.builder("ridego.positions.ingested").register(meterRegistry);
     }
 
     @KafkaListener(topics = Topics.DRIVER_POSITIONS, groupId = "location-ingest")
@@ -38,6 +43,7 @@ public class PositionIngestListener {
         double lng = node.get("lng").asDouble();
 
         locationService.ingestPosition(driverId, cityId, lat, lng);
+        positionsIngested.increment();
 
         String tripId = activeTrips.tripForDriver(driverId);
         if (tripId != null) {

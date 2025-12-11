@@ -23,3 +23,12 @@ spring:
 ridego:
   outbox:
     poll-interval-ms: ${OUTBOX_POLL_INTERVAL_MS:500}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  metrics:
+    tags:
+      application: ${spring.application.name}

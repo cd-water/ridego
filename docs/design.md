@@ -310,3 +310,12 @@ ridego/
 - 事件最终一致：读模型可能短暂滞后，写侧以 PG 约束保证正确性。
 - 行程中司机掉线、`in_progress` 异常终止不在 v1 范围。
 - 无真实地图与 ETA；仿真器使用合成网格与直线距离。
+
+## 12. 可观测性与运维
+
+- 所有服务接入 Spring Boot Actuator + Micrometer，暴露 `/actuator/prometheus`。
+- 业务指标：`ridego.trips.created/completed/cancelled/unmatched`、`ridego.offers.created/accepted/rejected/expired`、`ridego.positions.ingested`、`ridego.invoices.paid`。
+- Prometheus 抓取宿主机上的 6 个服务（`host.docker.internal`），规则见 `ops/prometheus/alerts.yml`：
+  - 服务不可用、5xx 比例、p95 延迟、Kafka 消费积压。
+- Grafana 预置 Prometheus 数据源与 `RideGo` 看板，位于 `ops/grafana/`。
+- 本地启动、仿真场景与排查命令见 `docs/runbook.md`。

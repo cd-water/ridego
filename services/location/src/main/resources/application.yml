@@ -33,3 +33,12 @@ ridego:
     heartbeat-scan-ms: ${HEARTBEAT_SCAN_MS:10000}
   trail:
     flush-ms: ${TRAIL_FLUSH_MS:1000}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  metrics:
+    tags:
+      application: ${spring.application.name}

@@ -17,3 +17,12 @@ ridego:
     ttl-seconds: ${JWT_TTL_SECONDS:3600}
   seed:
     enabled: ${RIDEGO_SEED_ENABLED:true}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  metrics:
+    tags:
+      application: ${spring.application.name}

@@ -37,3 +37,12 @@ ridego:
     expiry-scan-ms: ${OFFER_EXPIRY_SCAN_MS:1000}
   outbox:
     poll-interval-ms: ${OUTBOX_POLL_INTERVAL_MS:500}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  metrics:
+    tags:
+      application: ${spring.application.name}

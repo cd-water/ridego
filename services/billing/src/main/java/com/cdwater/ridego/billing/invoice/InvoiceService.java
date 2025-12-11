@@ -6,6 +6,8 @@ import com.cdwater.ridego.contracts.InvoicePayload;
 import com.cdwater.ridego.contracts.Topics;
 import com.cdwater.ridego.contracts.TripCompletedPayload;
 import com.cdwater.ridego.billing.outbox.OutboxRepository;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,10 +24,12 @@ public class InvoiceService {
 
     private final JdbcTemplate jdbc;
     private final OutboxRepository outbox;
+    private final Counter invoicesPaid;
 
-    public InvoiceService(JdbcTemplate jdbc, OutboxRepository outbox) {
+    public InvoiceService(JdbcTemplate jdbc, OutboxRepository outbox, MeterRegistry meterRegistry) {
         this.jdbc = jdbc;
         this.outbox = outbox;
+        this.invoicesPaid = Counter.builder("ridego.invoices.paid").register(meterRegistry);
     }
 
     @Transactional
@@ -61,6 +65,7 @@ public class InvoiceService {
 
         outbox.append(Topics.BILLING_EVENTS, trip.tripId(), event(EventTypes.INVOICE_PAID, trip.tripId(),
                 new InvoicePayload(invoiceId.toString(), trip.tripId(), trip.riderId(), ZERO_AMOUNT, "PAID")));
+        invoicesPaid.increment();
     }
 
     public Invoice findByTripId(UUID tripId, String riderId) {

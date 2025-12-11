@@ -8,6 +8,8 @@ import com.cdwater.ridego.dispatch.client.LocationClient;
 import com.cdwater.ridego.dispatch.offer.OfferRepository;
 import com.cdwater.ridego.dispatch.outbox.DispatchEvents;
 import com.cdwater.ridego.dispatch.processed.ProcessedEventRepository;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -33,19 +35,22 @@ public class MatchingTransaction {
     private final DispatchEvents dispatchEvents;
     private final StringRedisTemplate redis;
     private final Duration claimTtl;
+    private final Counter offersCreated;
 
     public MatchingTransaction(ProcessedEventRepository processedEvents,
                                AvailabilityRepository availability,
                                OfferRepository offers,
                                DispatchEvents dispatchEvents,
                                StringRedisTemplate redis,
-                               @Value("${ridego.matching.offer-ttl-seconds:10}") long offerTtlSeconds) {
+                               @Value("${ridego.matching.offer-ttl-seconds:10}") long offerTtlSeconds,
+                               MeterRegistry meterRegistry) {
         this.processedEvents = processedEvents;
         this.availability = availability;
         this.offers = offers;
         this.dispatchEvents = dispatchEvents;
         this.redis = redis;
         this.claimTtl = Duration.ofSeconds(offerTtlSeconds);
+        this.offersCreated = Counter.builder("ridego.offers.issued").register(meterRegistry);
     }
 
     @Transactional
@@ -83,6 +88,7 @@ public class MatchingTransaction {
             availability.move(driverId, "IDLE", "OFFERED");
             dispatchEvents.append(EventTypes.OFFER_CREATED, tripId, trip.cityId(),
                     new OfferLifecyclePayload(offerId.toString(), trip.tripId(), driverId, expiresAt));
+            offersCreated.increment();
             return true;
         }
         return false;

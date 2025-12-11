@@ -13,6 +13,8 @@ import com.cdwater.ridego.trip.web.BadRequestException;
 import com.cdwater.ridego.trip.web.ConflictException;
 import com.cdwater.ridego.trip.web.ForbiddenException;
 import com.cdwater.ridego.trip.web.TripNotFoundException;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,15 +35,22 @@ public class TripService {
     private final OutboxRepository outbox;
     private final TripEvents events;
     private final long matchingWindowSeconds;
+    private final Counter tripsCreated;
+    private final Counter tripsCompleted;
+    private final Counter tripsCancelled;
 
     public TripService(TripRepository trips,
                        OutboxRepository outbox,
                        TripEvents events,
-                       @Value("${ridego.matching.window-seconds:90}") long matchingWindowSeconds) {
+                       @Value("${ridego.matching.window-seconds:90}") long matchingWindowSeconds,
+                       MeterRegistry meterRegistry) {
         this.trips = trips;
         this.outbox = outbox;
         this.events = events;
         this.matchingWindowSeconds = matchingWindowSeconds;
+        this.tripsCreated = Counter.builder("ridego.trips.requested").register(meterRegistry);
+        this.tripsCompleted = Counter.builder("ridego.trips.completed").register(meterRegistry);
+        this.tripsCancelled = Counter.builder("ridego.trips.cancelled").register(meterRegistry);
     }
 
     @Transactional
@@ -73,6 +82,7 @@ public class TripService {
                 null,
                 payload);
         outbox.append("trip.events.v1", id.toString(), event);
+        tripsCreated.increment();
 
         return new TripResponse(id.toString(), TripState.REQUESTED.wireValue());
     }
@@ -120,6 +130,7 @@ public class TripService {
         }
         events.append(EventTypes.TRIP_CANCELLED, trip,
                 new TripCancelledPayload(id.toString(), "rider", cancelReason));
+        tripsCancelled.increment();
     }
 
     @Transactional
@@ -159,6 +170,7 @@ public class TripService {
                 trip.pickupLng(),
                 trip.dropoffLat(),
                 trip.dropoffLng()));
+        tripsCompleted.increment();
     }
 
     private TripRecord requireDriverState(UUID id, String driverId, String expectedState) {

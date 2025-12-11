@@ -49,3 +49,12 @@ spring:
 ridego:
   jwt:
     secret: ${JWT_SECRET:ridejwt-ridego-local-dev-secret-32bytes}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  metrics:
+    tags:
+      application: ${spring.application.name}

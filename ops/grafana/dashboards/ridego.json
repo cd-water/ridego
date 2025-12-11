@@ -1,0 +1,99 @@
+{
+  "uid": "ridego",
+  "title": "RideGo",
+  "tags": ["ridego"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "10s",
+  "time": {"from": "now-15m", "to": "now"},
+  "annotations": {"list": []},
+  "templating": {"list": []},
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "HTTP 请求速率",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "reqps"}, "overrides": []},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (application) (rate(http_server_requests_seconds_count[1m]))",
+          "legendFormat": "{{application}}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "HTTP p95 延迟",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le, application) (rate(http_server_requests_seconds_bucket[5m])))",
+          "legendFormat": "{{application}}"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "JVM 堆内存",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "bytes"}, "overrides": []},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (application) (jvm_memory_used_bytes{area=\"heap\"})",
+          "legendFormat": "{{application}}"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "行程事件速率",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "ops"}, "overrides": []},
+      "targets": [
+        {"refId": "A", "expr": "rate(ridego_trips_requested_total[1m])", "legendFormat": "requested"},
+        {"refId": "B", "expr": "rate(ridego_trips_completed_total[1m])", "legendFormat": "completed"},
+        {"refId": "C", "expr": "rate(ridego_trips_cancelled_total[1m])", "legendFormat": "cancelled"},
+        {"refId": "D", "expr": "rate(ridego_trips_unmatched_total[1m])", "legendFormat": "unmatched"}
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Offer 事件速率",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "ops"}, "overrides": []},
+      "targets": [
+        {"refId": "A", "expr": "rate(ridego_offers_issued_total[1m])", "legendFormat": "issued"},
+        {"refId": "B", "expr": "rate(ridego_offers_accepted_total[1m])", "legendFormat": "accepted"},
+        {"refId": "C", "expr": "rate(ridego_offers_rejected_total[1m])", "legendFormat": "rejected"},
+        {"refId": "D", "expr": "rate(ridego_offers_expired_total[1m])", "legendFormat": "expired"}
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "位置摄入与账单",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "ops"}, "overrides": []},
+      "targets": [
+        {"refId": "A", "expr": "rate(ridego_positions_ingested_total[1m])", "legendFormat": "positions/s"},
+        {"refId": "B", "expr": "rate(ridego_invoices_paid_total[1m])", "legendFormat": "invoices/s"}
+      ]
+    }
+  ]
+}

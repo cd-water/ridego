@@ -8,6 +8,8 @@ import com.cdwater.ridego.dispatch.outbox.DispatchEvents;
 import com.cdwater.ridego.dispatch.web.ConflictException;
 import com.cdwater.ridego.dispatch.web.ForbiddenException;
 import com.cdwater.ridego.dispatch.web.NotFoundException;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,15 +25,20 @@ public class OfferService {
     private final AvailabilityRepository availability;
     private final DispatchEvents dispatchEvents;
     private final StringRedisTemplate redis;
+    private final Counter offersAccepted;
+    private final Counter offersRejected;
 
     public OfferService(OfferRepository offers,
                         AvailabilityRepository availability,
                         DispatchEvents dispatchEvents,
-                        StringRedisTemplate redis) {
+                        StringRedisTemplate redis,
+                        MeterRegistry meterRegistry) {
         this.offers = offers;
         this.availability = availability;
         this.dispatchEvents = dispatchEvents;
         this.redis = redis;
+        this.offersAccepted = Counter.builder("ridego.offers.accepted").register(meterRegistry);
+        this.offersRejected = Counter.builder("ridego.offers.rejected").register(meterRegistry);
     }
 
     public List<Offer> pendingForDriver(String driverId) {
@@ -48,6 +55,7 @@ public class OfferService {
         dispatchEvents.append(EventTypes.OFFER_ACCEPTED, offer.tripId(), offer.cityId(),
                 new OfferLifecyclePayload(offerId.toString(), offer.tripId().toString(), driverId, offer.expiresAt()));
         redis.delete(MatchingTransaction.claimKey(driverId));
+        offersAccepted.increment();
     }
 
     @Transactional
@@ -60,6 +68,7 @@ public class OfferService {
         dispatchEvents.append(EventTypes.OFFER_REJECTED, offer.tripId(), offer.cityId(),
                 new OfferLifecyclePayload(offerId.toString(), offer.tripId().toString(), driverId, offer.expiresAt()));
         redis.delete(MatchingTransaction.claimKey(driverId));
+        offersRejected.increment();
     }
 
     private Offer requireOwnOffer(UUID offerId, String driverId) {
