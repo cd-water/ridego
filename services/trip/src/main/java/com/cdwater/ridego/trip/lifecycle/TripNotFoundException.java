@@ -1,4 +1,4 @@
-package com.cdwater.ridego.trip.web;
+package com.cdwater.ridego.trip.lifecycle;
 
 public class TripNotFoundException extends RuntimeException {
 }

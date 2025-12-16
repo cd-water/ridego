@@ -64,7 +64,7 @@ requested   → matching | cancelled
 matching    → offered | unmatched | cancelled
 offered     → accepted | matching(拒绝/超时) | cancelled
 accepted    → arrived | matching(司机取消) | cancelled
-arrived     → in_progress | cancelled(乘客取消/爽约)
+arrived     → in_progress | matching(司机取消) | cancelled(乘客取消/爽约)
 in_progress → completed
 ```
 
@@ -76,6 +76,8 @@ in_progress → completed
 - `arrived` 之前不能 `in_progress`；`in_progress` 在 v1 不允许取消。
 
 默认参数（可配置）：Offer 有效期 10 秒；匹配窗口 90 秒；司机取消后重派重置匹配窗口；候选半径 3 km，30 秒后扩到 5 km。
+
+写侧由 `TripLifecycle` 模块拥有：状态转移表、状态 CAS、时间戳、事件构造与 outbox 追加。HTTP、Kafka 与匹配窗口调度都是薄适配器；`TripState` 是模块内部的唯一状态词汇。
 
 ## 4. 关键流程
 
@@ -136,7 +138,7 @@ in_progress → completed
 
 ### 5.2 一致性
 
-- 写模型状态 + `version` 乐观锁；状态变更与 outbox 记录在同一事务。
+- 写模型使用状态 CAS（`WHERE state = expected`）；`version` 单调递增，用于审计。状态变更与 outbox 记录在同一事务，先 save 后发事件。
 - outbox 轮询投递器每 500 ms 扫描并发布到 Kafka；至少一次投递。
 - 所有消费者按 `eventId` 幂等（`processed_events` 主键去重）。
 - 司机分配：`dispatch` 的 PG 唯一约束（司机上只能有一条活跃 Offer / 活跃 Trip 引用）+ Redis `SET NX EX` 抢占键；两者都成功才发 Offer，失败方回滚。

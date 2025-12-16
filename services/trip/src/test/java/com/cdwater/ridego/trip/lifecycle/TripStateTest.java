@@ -1,4 +1,4 @@
-package com.cdwater.ridego.trip.domain;
+package com.cdwater.ridego.trip.lifecycle;
 
 import org.junit.jupiter.api.Test;
 
@@ -21,6 +21,7 @@ class TripStateTest {
     void allowsRedispatchAndTerminalTransitions() {
         assertTrue(TripState.OFFERED.canTransitionTo(TripState.MATCHING));
         assertTrue(TripState.ACCEPTED.canTransitionTo(TripState.MATCHING));
+        assertTrue(TripState.ARRIVED.canTransitionTo(TripState.MATCHING));
         assertTrue(TripState.MATCHING.canTransitionTo(TripState.UNMATCHED));
         assertTrue(TripState.ARRIVED.canTransitionTo(TripState.CANCELLED));
     }

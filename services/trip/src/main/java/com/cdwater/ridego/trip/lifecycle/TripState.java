@@ -1,4 +1,4 @@
-package com.cdwater.ridego.trip.domain;
+package com.cdwater.ridego.trip.lifecycle;
 
 import java.util.Locale;
 import java.util.Map;
@@ -21,7 +21,7 @@ public enum TripState {
             MATCHING, Set.of(OFFERED, UNMATCHED, CANCELLED),
             OFFERED, Set.of(ACCEPTED, MATCHING, CANCELLED),
             ACCEPTED, Set.of(ARRIVED, MATCHING, CANCELLED),
-            ARRIVED, Set.of(IN_PROGRESS, CANCELLED),
+            ARRIVED, Set.of(IN_PROGRESS, MATCHING, CANCELLED),
             IN_PROGRESS, Set.of(COMPLETED),
             COMPLETED, Set.of(),
             CANCELLED, Set.of(),
