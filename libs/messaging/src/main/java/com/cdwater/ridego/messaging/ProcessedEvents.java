@@ -1,20 +1,21 @@
-package com.cdwater.ridego.dispatch.processed;
+package com.cdwater.ridego.messaging;
 
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.stereotype.Repository;
 
 import java.util.UUID;
 
-@Repository
-public class ProcessedEventRepository {
+public class ProcessedEvents {
 
     private final JdbcTemplate jdbc;
 
-    public ProcessedEventRepository(JdbcTemplate jdbc) {
+    public ProcessedEvents(JdbcTemplate jdbc) {
         this.jdbc = jdbc;
     }
 
-    public boolean markProcessed(String consumer, String eventId) {
+    /**
+     * @return true when this consumer has not processed the event before
+     */
+    public boolean markOnce(String consumer, String eventId) {
         return jdbc.update("""
                         INSERT INTO processed_events (consumer, event_id, processed_at)
                         VALUES (?, ?, now())

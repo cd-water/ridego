@@ -1,40 +1,34 @@
-package com.cdwater.ridego.billing.outbox;
+package com.cdwater.ridego.messaging;
 
 import com.cdwater.ridego.contracts.EventEnvelope;
+import com.cdwater.ridego.contracts.EventEnvelopeCodec;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.stereotype.Repository;
-import tools.jackson.core.JacksonException;
-import tools.jackson.databind.ObjectMapper;
 
 import java.sql.Timestamp;
 import java.util.List;
 import java.util.UUID;
 
-@Repository
 public class OutboxRepository {
 
     private final JdbcTemplate jdbc;
-    private final ObjectMapper objectMapper;
+    private final EventEnvelopeCodec codec;
 
-    public OutboxRepository(JdbcTemplate jdbc, ObjectMapper objectMapper) {
+    public OutboxRepository(JdbcTemplate jdbc, EventEnvelopeCodec codec) {
         this.jdbc = jdbc;
-        this.objectMapper = objectMapper;
+        this.codec = codec;
     }
 
-    public void append(String topic, String key, EventEnvelope<?> event) {
-        try {
-            jdbc.update("""
-                            INSERT INTO outbox (event_id, topic, event_key, payload, occurred_at)
-                            VALUES (?, ?, ?, ?::jsonb, ?)
-                            """,
-                    UUID.fromString(event.eventId()),
-                    topic,
-                    key,
-                    objectMapper.writeValueAsString(event),
-                    Timestamp.from(event.occurredAt()));
-        } catch (JacksonException e) {
-            throw new IllegalStateException("failed to serialize event " + event.eventId(), e);
-        }
+    public void append(String topic, String key, String cityId, String eventType, Object payload) {
+        EventEnvelope<Object> envelope = codec.envelope(eventType, key, cityId, key, null, payload);
+        jdbc.update("""
+                        INSERT INTO outbox (event_id, topic, event_key, payload, occurred_at)
+                        VALUES (?, ?, ?, ?::jsonb, ?)
+                        """,
+                UUID.fromString(envelope.eventId()),
+                topic,
+                key,
+                codec.encode(envelope),
+                Timestamp.from(envelope.occurredAt()));
     }
 
     public List<OutboxRow> findUnpublished(int limit) {

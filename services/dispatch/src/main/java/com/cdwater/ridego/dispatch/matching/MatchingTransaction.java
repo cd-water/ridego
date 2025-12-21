@@ -7,7 +7,7 @@ import com.cdwater.ridego.dispatch.availability.AvailabilityRepository;
 import com.cdwater.ridego.dispatch.client.LocationClient;
 import com.cdwater.ridego.dispatch.offer.OfferRepository;
 import com.cdwater.ridego.dispatch.outbox.DispatchEvents;
-import com.cdwater.ridego.dispatch.processed.ProcessedEventRepository;
+import com.cdwater.ridego.messaging.ProcessedEvents;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.slf4j.Logger;
@@ -29,7 +29,7 @@ public class MatchingTransaction {
     private static final Logger log = LoggerFactory.getLogger(MatchingTransaction.class);
     private static final String CONSUMER = "dispatch-matching";
 
-    private final ProcessedEventRepository processedEvents;
+    private final ProcessedEvents processedEvents;
     private final AvailabilityRepository availability;
     private final OfferRepository offers;
     private final DispatchEvents dispatchEvents;
@@ -37,7 +37,7 @@ public class MatchingTransaction {
     private final Duration claimTtl;
     private final Counter offersCreated;
 
-    public MatchingTransaction(ProcessedEventRepository processedEvents,
+    public MatchingTransaction(ProcessedEvents processedEvents,
                                AvailabilityRepository availability,
                                OfferRepository offers,
                                DispatchEvents dispatchEvents,
@@ -55,7 +55,7 @@ public class MatchingTransaction {
 
     @Transactional
     public boolean apply(TripRequestedPayload trip, String eventId, List<LocationClient.NearbyDriver> candidates) {
-        if (!processedEvents.markProcessed(CONSUMER, eventId)) {
+        if (!processedEvents.markOnce(CONSUMER, eventId)) {
             return true;
         }
 

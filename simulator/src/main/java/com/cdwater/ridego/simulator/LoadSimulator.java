@@ -1,6 +1,7 @@
 package com.cdwater.ridego.simulator;
 
 import com.cdwater.ridego.contracts.EventEnvelope;
+import com.cdwater.ridego.contracts.EventEnvelopeCodec;
 import com.cdwater.ridego.contracts.EventTypes;
 import com.cdwater.ridego.contracts.InternalHeaders;
 import com.cdwater.ridego.contracts.Roles;
@@ -13,10 +14,10 @@ import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
-import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -44,6 +45,7 @@ public class LoadSimulator {
     private final RestClient tripClient;
     private final KafkaTemplate<String, String> kafkaTemplate;
     private final ObjectMapper objectMapper;
+    private final EventEnvelopeCodec codec;
 
     @Value("${ridego.simulator.load.drivers:10000}")
     private int drivers;
@@ -99,6 +101,7 @@ public class LoadSimulator {
         this.tripClient = RestClient.create(tripUrl);
         this.kafkaTemplate = kafkaTemplate;
         this.objectMapper = objectMapper;
+        this.codec = new EventEnvelopeCodec(objectMapper, Clock.systemUTC());
     }
 
     public void run() throws Exception {
@@ -134,9 +137,7 @@ public class LoadSimulator {
 
     @KafkaListener(topics = {Topics.DISPATCH_EVENTS, Topics.TRIP_EVENTS}, groupId = "load-simulator")
     public void onEvent(String message) {
-        EventEnvelope<JsonNode> event = objectMapper.readValue(
-                message, new TypeReference<EventEnvelope<JsonNode>>() {
-                });
+        EventEnvelope<JsonNode> event = codec.decode(message);
 
         switch (event.eventType()) {
             case EventTypes.TRIP_REQUESTED -> {

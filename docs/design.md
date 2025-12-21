@@ -180,6 +180,7 @@ in_progress → completed
 ```
 
 - 与数据库同事务的事件走 outbox；GPS 遥测直接进 Kafka，不落 outbox。
+- 信封编解码在 `libs/contracts`；outbox 中继与幂等消费在 `libs/messaging`。每个服务仍拥有自己的 `outbox` / `processed_events` 表。
 - 不引入 Schema Registry；通过 `eventType + eventVersion` 演进。
 
 ## 6. API 表面（v1）
@@ -242,7 +243,8 @@ seed: 42
 ridego/
 ├── pom.xml                      # 聚合与依赖版本
 ├── libs/
-│   └── contracts/               # 事件信封、事件 DTO、JWT claim 常量（无业务逻辑）
+│   ├── contracts/               # 事件信封、事件 DTO、编解码、JWT claim 常量
+│   └── messaging/               # outbox 仓库/中继、幂等消费（各服务保留自己的表）
 ├── services/
 │   ├── pom.xml                  # 聚合
 │   ├── identity/

@@ -1,20 +1,22 @@
 package com.cdwater.ridego.trip.config;
 
+import com.cdwater.ridego.messaging.MessagingConfiguration;
+import com.cdwater.ridego.messaging.OutboxRepository;
 import com.cdwater.ridego.trip.lifecycle.TripEventSink;
 import com.cdwater.ridego.trip.lifecycle.TripLifecycle;
 import com.cdwater.ridego.trip.lifecycle.TripStore;
 import com.cdwater.ridego.trip.outbox.MetricsTripEventSink;
-import com.cdwater.ridego.trip.outbox.OutboxRepository;
 import com.cdwater.ridego.trip.outbox.OutboxTripEventSink;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import tools.jackson.databind.ObjectMapper;
+import org.springframework.context.annotation.Import;
 
 import java.time.Clock;
 
 @Configuration
+@Import(MessagingConfiguration.class)
 public class TripLifecycleConfig {
 
     @Bean
@@ -24,10 +26,9 @@ public class TripLifecycleConfig {
 
     @Bean
     public TripEventSink tripEventSink(OutboxRepository outbox,
-                                       ObjectMapper objectMapper,
                                        MeterRegistry meterRegistry) {
         return new MetricsTripEventSink(
-                new OutboxTripEventSink(outbox, objectMapper), meterRegistry);
+                new OutboxTripEventSink(outbox), meterRegistry);
     }
 
     @Bean

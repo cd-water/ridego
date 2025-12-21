@@ -1,11 +1,11 @@
 package com.cdwater.ridego.billing.invoice;
 
-import com.cdwater.ridego.contracts.EventEnvelope;
 import com.cdwater.ridego.contracts.EventTypes;
 import com.cdwater.ridego.contracts.InvoicePayload;
 import com.cdwater.ridego.contracts.Topics;
 import com.cdwater.ridego.contracts.TripCompletedPayload;
-import com.cdwater.ridego.billing.outbox.OutboxRepository;
+import com.cdwater.ridego.messaging.OutboxRepository;
+import com.cdwater.ridego.messaging.ProcessedEvents;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -24,23 +24,22 @@ public class InvoiceService {
 
     private final JdbcTemplate jdbc;
     private final OutboxRepository outbox;
+    private final ProcessedEvents processedEvents;
     private final Counter invoicesPaid;
 
-    public InvoiceService(JdbcTemplate jdbc, OutboxRepository outbox, MeterRegistry meterRegistry) {
+    public InvoiceService(JdbcTemplate jdbc,
+                          OutboxRepository outbox,
+                          ProcessedEvents processedEvents,
+                          MeterRegistry meterRegistry) {
         this.jdbc = jdbc;
         this.outbox = outbox;
+        this.processedEvents = processedEvents;
         this.invoicesPaid = Counter.builder("ridego.invoices.paid").register(meterRegistry);
     }
 
     @Transactional
     public void onTripCompleted(TripCompletedPayload trip, String eventId) {
-        int inserted = jdbc.update("""
-                        INSERT INTO processed_events (consumer, event_id, processed_at)
-                        VALUES (?, ?, now())
-                        ON CONFLICT DO NOTHING
-                        """,
-                CONSUMER, UUID.fromString(eventId));
-        if (inserted == 0) {
+        if (!processedEvents.markOnce(CONSUMER, eventId)) {
             return;
         }
 
@@ -54,8 +53,9 @@ public class InvoiceService {
                 invoiceId, UUID.fromString(trip.tripId()), trip.riderId(), trip.driverId(),
                 ZERO_AMOUNT, Timestamp.from(now));
 
-        outbox.append(Topics.BILLING_EVENTS, trip.tripId(), event(EventTypes.INVOICE_ISSUED, trip.tripId(),
-                new InvoicePayload(invoiceId.toString(), trip.tripId(), trip.riderId(), ZERO_AMOUNT, "ISSUED")));
+        outbox.append(Topics.BILLING_EVENTS, trip.tripId(), null,
+                EventTypes.INVOICE_ISSUED,
+                new InvoicePayload(invoiceId.toString(), trip.tripId(), trip.riderId(), ZERO_AMOUNT, "ISSUED"));
 
         jdbc.update("""
                         UPDATE invoices SET state = 'PAID', paid_at = now()
@@ -63,8 +63,9 @@ public class InvoiceService {
                         """,
                 UUID.fromString(trip.tripId()));
 
-        outbox.append(Topics.BILLING_EVENTS, trip.tripId(), event(EventTypes.INVOICE_PAID, trip.tripId(),
-                new InvoicePayload(invoiceId.toString(), trip.tripId(), trip.riderId(), ZERO_AMOUNT, "PAID")));
+        outbox.append(Topics.BILLING_EVENTS, trip.tripId(), null,
+                EventTypes.INVOICE_PAID,
+                new InvoicePayload(invoiceId.toString(), trip.tripId(), trip.riderId(), ZERO_AMOUNT, "PAID"));
         invoicesPaid.increment();
     }
 
@@ -85,19 +86,6 @@ public class InvoiceService {
                 .filter(invoice -> invoice.riderId().equals(riderId))
                 .findFirst()
                 .orElseThrow(InvoiceNotFoundException::new);
-    }
-
-    private EventEnvelope<InvoicePayload> event(String type, String tripId, InvoicePayload payload) {
-        return new EventEnvelope<>(
-                UUID.randomUUID().toString(),
-                type,
-                1,
-                Instant.now(),
-                tripId,
-                null,
-                tripId,
-                null,
-                payload);
     }
 
     public record Invoice(UUID id, UUID tripId, String riderId, String driverId,

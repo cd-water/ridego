@@ -1,15 +1,15 @@
 package com.cdwater.ridego.trip.projection;
 
 import com.cdwater.ridego.contracts.EventEnvelope;
+import com.cdwater.ridego.contracts.EventEnvelopeCodec;
 import com.cdwater.ridego.contracts.EventTypes;
 import com.cdwater.ridego.contracts.Topics;
+import com.cdwater.ridego.messaging.ProcessedEvents;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
-import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.ObjectMapper;
 
 import java.util.UUID;
 
@@ -18,28 +18,24 @@ public class TripProjectionListener {
 
     private static final String CONSUMER = "trip-projection";
 
-    private final ObjectMapper objectMapper;
+    private final EventEnvelopeCodec codec;
+    private final ProcessedEvents processedEvents;
     private final JdbcTemplate jdbc;
 
-    public TripProjectionListener(ObjectMapper objectMapper, JdbcTemplate jdbc) {
-        this.objectMapper = objectMapper;
+    public TripProjectionListener(EventEnvelopeCodec codec,
+                                  ProcessedEvents processedEvents,
+                                  JdbcTemplate jdbc) {
+        this.codec = codec;
+        this.processedEvents = processedEvents;
         this.jdbc = jdbc;
     }
 
     @KafkaListener(topics = Topics.TRIP_EVENTS, groupId = CONSUMER)
     @Transactional
     public void onMessage(String message) {
-        EventEnvelope<JsonNode> event = objectMapper.readValue(
-                message, new TypeReference<EventEnvelope<JsonNode>>() {
-                });
+        EventEnvelope<JsonNode> event = codec.decode(message);
 
-        int inserted = jdbc.update("""
-                        INSERT INTO processed_events (consumer, event_id, processed_at)
-                        VALUES (?, ?, now())
-                        ON CONFLICT DO NOTHING
-                        """,
-                CONSUMER, UUID.fromString(event.eventId()));
-        if (inserted == 0) {
+        if (!processedEvents.markOnce(CONSUMER, event.eventId())) {
             return;
         }
 
