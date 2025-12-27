@@ -1,13 +1,14 @@
 package com.cdwater.ridego.dispatch.outbox;
 
 import com.cdwater.ridego.contracts.Topics;
+import com.cdwater.ridego.dispatch.lifecycle.DispatchEventSink;
 import com.cdwater.ridego.messaging.OutboxRepository;
 import org.springframework.stereotype.Component;
 
 import java.util.UUID;
 
 @Component
-public class DispatchEvents {
+public class DispatchEvents implements DispatchEventSink {
 
     private final OutboxRepository outbox;
 

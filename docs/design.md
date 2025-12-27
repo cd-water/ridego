@@ -98,6 +98,7 @@ in_progress → completed
 - 司机拒绝时发出 `OfferRejected`，司机回 IDLE。
 - `trip` 消费以上事件：若仍在匹配窗口内，`offered → matching`；`dispatch` 排除该司机后继续下一位。
 - 匹配窗口耗尽由 `trip` 判定：`matching → unmatched`，发出 `TripUnmatched`；`dispatch` 收到后停止该 Trip 的匹配。
+- Offer 的创建、接受、拒绝、过期、关闭与释放由 `OfferLifecycle` 模块统一拥有（Offer 状态机、Redis 抢占、司机可用性转移、事件发送）；`MatchingService` 只负责查询候选司机并调用 `attemptOffer`。
 
 ### 4.3 行程执行与取消
 

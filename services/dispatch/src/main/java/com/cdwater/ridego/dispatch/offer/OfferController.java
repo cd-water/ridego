@@ -2,6 +2,8 @@ package com.cdwater.ridego.dispatch.offer;
 
 import com.cdwater.ridego.contracts.InternalHeaders;
 import com.cdwater.ridego.contracts.Roles;
+import com.cdwater.ridego.dispatch.lifecycle.OfferLifecycle;
+import com.cdwater.ridego.dispatch.lifecycle.OfferStore;
 import com.cdwater.ridego.dispatch.web.ForbiddenException;
 import com.cdwater.ridego.dispatch.web.UnauthorizedException;
 import org.springframework.http.HttpStatus;
@@ -21,10 +23,12 @@ import java.util.UUID;
 @RequestMapping("/offers")
 public class OfferController {
 
-    private final OfferService offerService;
+    private final OfferLifecycle offerLifecycle;
+    private final OfferStore offerStore;
 
-    public OfferController(OfferService offerService) {
-        this.offerService = offerService;
+    public OfferController(OfferLifecycle offerLifecycle, OfferStore offerStore) {
+        this.offerLifecycle = offerLifecycle;
+        this.offerStore = offerStore;
     }
 
     @GetMapping("/pending")
@@ -32,8 +36,11 @@ public class OfferController {
             @RequestHeader(name = InternalHeaders.DRIVER_ID, required = false) String driverId,
             @RequestHeader(name = InternalHeaders.ROLE, required = false) String role) {
         requireDriver(driverId, role);
-        return offerService.pendingForDriver(driverId).stream()
-                .map(offer -> new PendingOffer(offer.id().toString(), offer.tripId().toString(), offer.expiresAt()))
+        return offerStore.pendingForDriver(driverId).stream()
+                .map(offer -> new PendingOffer(
+                        offer.getId().toString(),
+                        offer.getTripId().toString(),
+                        offer.getExpiresAt()))
                 .toList();
     }
 
@@ -43,7 +50,7 @@ public class OfferController {
                        @RequestHeader(name = InternalHeaders.DRIVER_ID, required = false) String driverId,
                        @RequestHeader(name = InternalHeaders.ROLE, required = false) String role) {
         requireDriver(driverId, role);
-        offerService.accept(id, driverId);
+        offerLifecycle.accept(id, driverId);
     }
 
     @PostMapping("/{id}/reject")
@@ -52,7 +59,7 @@ public class OfferController {
                        @RequestHeader(name = InternalHeaders.DRIVER_ID, required = false) String driverId,
                        @RequestHeader(name = InternalHeaders.ROLE, required = false) String role) {
         requireDriver(driverId, role);
-        offerService.reject(id, driverId);
+        offerLifecycle.reject(id, driverId);
     }
 
     private void requireDriver(String driverId, String role) {
