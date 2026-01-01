@@ -4,9 +4,13 @@ public interface DriverAvailability {
 
     boolean isIdle(String driverId, String cityId);
 
-    void markOffered(String driverId);
+    boolean markOffered(String driverId);
 
-    void markOnTrip(String driverId);
+    boolean markOnTrip(String driverId);
 
-    void release(String driverId);
+    boolean release(String driverId);
+
+    boolean markOnline(String driverId, String cityId);
+
+    boolean markOffline(String driverId, String cityId);
 }

@@ -196,6 +196,38 @@ class OfferLifecycleTest {
     }
 
     @Test
+    void markOfferedFailureEmitsNoOfferCreated() {
+        availability.failNextMarkOffered = true;
+
+        assertThrows(OfferConflictException.class,
+                () -> lifecycle.attemptOffer(TRIP_ID, CITY, EVENT_ID, List.of("driver-1")));
+        assertEquals(List.of(EventTypes.MATCHING_STARTED), sink.types());
+    }
+
+    @Test
+    void markOnTripFailureEmitsNoAccepted() {
+        lifecycle.attemptOffer(TRIP_ID, CITY, EVENT_ID, List.of("driver-1"));
+        UUID offerId = onlyOffer().getId();
+        availability.failNextMarkOnTrip = true;
+
+        assertThrows(OfferConflictException.class, () -> lifecycle.accept(offerId, "driver-1"));
+        assertEquals(0, sink.count(EventTypes.OFFER_ACCEPTED));
+    }
+
+    @Test
+    void releaseFailureStillExpiresOffer() {
+        lifecycle.attemptOffer(TRIP_ID, CITY, EVENT_ID, List.of("driver-1"));
+        UUID offerId = onlyOffer().getId();
+        clock.advance(Duration.ofSeconds(11));
+        availability.failNextRelease = true;
+
+        lifecycle.expire(offerId);
+
+        assertEquals(OfferState.EXPIRED, store.offers.get(offerId).getState());
+        assertEquals(1, sink.count(EventTypes.OFFER_EXPIRED));
+    }
+
+    @Test
     void casFailureEmitsNoEvents() {
         lifecycle.attemptOffer(TRIP_ID, CITY, EVENT_ID, List.of("driver-1"));
         UUID offerId = onlyOffer().getId();
@@ -294,6 +326,9 @@ class OfferLifecycleTest {
 
     static final class FakeAvailability implements DriverAvailability {
         final Map<String, String> states = new HashMap<>();
+        boolean failNextMarkOffered;
+        boolean failNextMarkOnTrip;
+        boolean failNextRelease;
 
         @Override
         public boolean isIdle(String driverId, String cityId) {
@@ -301,18 +336,45 @@ class OfferLifecycleTest {
         }
 
         @Override
-        public void markOffered(String driverId) {
+        public boolean markOffered(String driverId) {
+            if (failNextMarkOffered) {
+                failNextMarkOffered = false;
+                return false;
+            }
             states.put(driverId, "OFFERED");
+            return true;
         }
 
         @Override
-        public void markOnTrip(String driverId) {
+        public boolean markOnTrip(String driverId) {
+            if (failNextMarkOnTrip) {
+                failNextMarkOnTrip = false;
+                return false;
+            }
             states.put(driverId, "ON_TRIP");
+            return true;
         }
 
         @Override
-        public void release(String driverId) {
+        public boolean release(String driverId) {
+            if (failNextRelease) {
+                failNextRelease = false;
+                return false;
+            }
             states.put(driverId, "IDLE");
+            return true;
+        }
+
+        @Override
+        public boolean markOnline(String driverId, String cityId) {
+            states.put(driverId, "IDLE");
+            return true;
+        }
+
+        @Override
+        public boolean markOffline(String driverId, String cityId) {
+            states.put(driverId, "OFFLINE");
+            return true;
         }
     }
 

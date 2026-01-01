@@ -3,6 +3,8 @@ package com.cdwater.ridego.dispatch.lifecycle;
 import com.cdwater.ridego.contracts.EventTypes;
 import com.cdwater.ridego.contracts.OfferLifecyclePayload;
 import com.cdwater.ridego.contracts.TripLifecyclePayload;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
@@ -14,6 +16,7 @@ import java.util.UUID;
 
 public class OfferLifecycle {
 
+    private static final Logger log = LoggerFactory.getLogger(OfferLifecycle.class);
     private static final String MATCHING_CONSUMER = "dispatch-matching";
 
     private final OfferStore store;
@@ -69,8 +72,11 @@ public class OfferLifecycle {
                 claim.release(driverId);
                 continue;
             }
+            if (!availability.markOffered(driverId)) {
+                throw new OfferConflictException(
+                        "driver " + driverId + " is no longer available");
+            }
 
-            availability.markOffered(driverId);
             events.append(EventTypes.OFFER_CREATED, tripId, cityId, payload(offer, driverId));
             return true;
         }
@@ -95,7 +101,10 @@ public class OfferLifecycle {
         }
 
         transition(offer, OfferState.ACCEPTED, now);
-        availability.markOnTrip(driverId);
+        if (!availability.markOnTrip(driverId)) {
+            throw new OfferConflictException(
+                    "driver " + driverId + " is no longer available");
+        }
         claim.release(driverId);
         events.append(EventTypes.OFFER_ACCEPTED, offer.tripId, offer.cityId, payload(offer, driverId));
     }
@@ -114,7 +123,9 @@ public class OfferLifecycle {
         }
 
         transition(offer, OfferState.REJECTED, clock.instant());
-        availability.release(driverId);
+        if (!availability.release(driverId)) {
+            log.warn("availability release lost for driver={} after reject", driverId);
+        }
         claim.release(driverId);
         events.append(EventTypes.OFFER_REJECTED, offer.tripId, offer.cityId, payload(offer, driverId));
     }
@@ -131,7 +142,9 @@ public class OfferLifecycle {
         }
 
         transition(offer, OfferState.EXPIRED, now);
-        availability.release(offer.driverId);
+        if (!availability.release(offer.driverId)) {
+            log.warn("availability release lost for driver={} after expiry", offer.driverId);
+        }
         claim.release(offer.driverId);
         events.append(EventTypes.OFFER_EXPIRED, offer.tripId, offer.cityId,
                 payload(offer, offer.driverId));
@@ -172,7 +185,10 @@ public class OfferLifecycle {
         if (!store.save(offer, expected.wireValue())) {
             return;
         }
-        availability.release(offer.driverId);
+        if (!availability.release(offer.driverId)) {
+            log.warn("availability release lost for driver={} after offer release",
+                    offer.driverId);
+        }
         claim.release(offer.driverId);
     }
 

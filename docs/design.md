@@ -43,6 +43,7 @@ v1 不做：ETA / 路径规划、双向评价、拼车、预约、动态调价�
 - 只有拥有者可以写自己的数据；跨服务读取一律通过 API 或事件。
 - `dispatch` 不直读 Redis GEO；它调用 `location` 的查询 API（ADR-0003）。
 - `dispatch` 拥有司机可用性（IDLE / OFFERED / ON_TRIP），`location` 只负责位置与在线 / 离线。
+- `dispatch` 的 `DriverAvailability` 模块把 presence 与可用性状态分开存储；Offer 结束时的 release 依据 presence 回到 IDLE 或 OFFLINE，避免把离线司机复活为可派单状态。
 
 ## 3. Trip 状态机
 

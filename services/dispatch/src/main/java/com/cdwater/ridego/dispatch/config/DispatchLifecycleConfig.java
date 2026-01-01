@@ -1,5 +1,7 @@
 package com.cdwater.ridego.dispatch.config;
 
+import com.cdwater.ridego.dispatch.availability.AvailabilityStore;
+import com.cdwater.ridego.dispatch.availability.DriverAvailabilityModule;
 import com.cdwater.ridego.dispatch.lifecycle.DedupStore;
 import com.cdwater.ridego.dispatch.lifecycle.DispatchEventSink;
 import com.cdwater.ridego.dispatch.lifecycle.DriverAvailability;
@@ -19,6 +21,11 @@ public class DispatchLifecycleConfig {
     @Bean
     public Clock clock() {
         return Clock.systemUTC();
+    }
+
+    @Bean
+    public DriverAvailability driverAvailability(AvailabilityStore store) {
+        return new DriverAvailabilityModule(store);
     }
 
     @Bean

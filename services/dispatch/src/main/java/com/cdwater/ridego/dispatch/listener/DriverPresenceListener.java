@@ -5,7 +5,9 @@ import com.cdwater.ridego.contracts.EventEnvelope;
 import com.cdwater.ridego.contracts.EventEnvelopeCodec;
 import com.cdwater.ridego.contracts.EventTypes;
 import com.cdwater.ridego.contracts.Topics;
-import com.cdwater.ridego.dispatch.availability.AvailabilityRepository;
+import com.cdwater.ridego.dispatch.lifecycle.DriverAvailability;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.JsonNode;
@@ -14,13 +16,15 @@ import tools.jackson.databind.ObjectMapper;
 @Component
 public class DriverPresenceListener {
 
+    private static final Logger log = LoggerFactory.getLogger(DriverPresenceListener.class);
+
     private final EventEnvelopeCodec codec;
     private final ObjectMapper objectMapper;
-    private final AvailabilityRepository availability;
+    private final DriverAvailability availability;
 
     public DriverPresenceListener(EventEnvelopeCodec codec,
                                   ObjectMapper objectMapper,
-                                  AvailabilityRepository availability) {
+                                  DriverAvailability availability) {
         this.codec = codec;
         this.objectMapper = objectMapper;
         this.availability = availability;
@@ -35,10 +39,12 @@ public class DriverPresenceListener {
         DriverPresenceChangedPayload payload = objectMapper.treeToValue(
                 event.payload(), DriverPresenceChangedPayload.class);
 
-        if (payload.online()) {
-            availability.online(payload.driverId(), payload.cityId());
-        } else {
-            availability.offline(payload.driverId(), payload.cityId());
+        boolean applied = payload.online()
+                ? availability.markOnline(payload.driverId(), payload.cityId())
+                : availability.markOffline(payload.driverId(), payload.cityId());
+        if (!applied) {
+            log.warn("presence update lost for driver={} online={}",
+                    payload.driverId(), payload.online());
         }
     }
 }
