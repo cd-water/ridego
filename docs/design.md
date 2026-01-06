@@ -145,6 +145,7 @@ in_progress → completed
 - 所有消费者按 `eventId` 幂等（`processed_events` 主键去重）。
 - 司机分配：`dispatch` 的 PG 唯一约束（司机上只能有一条活跃 Offer / 活跃 Trip 引用）+ Redis `SET NX EX` 抢占键；两者都成功才发 Offer，失败方回滚。
 - 补偿：`TripAcceptRejected` 让 `dispatch` 释放司机；`TripCancelled` / `TripUnmatched` 让 `dispatch` 关闭未决 Offer。
+- Trip 读模型由 `TripReadModel` 模块拥有：事件→状态映射在 `TripState.stateOfEvent`，监听器只做解码与幂等转发。
 
 ### 5.3 Redis
 

@@ -4,7 +4,7 @@ import com.cdwater.ridego.trip.lifecycle.ActorType;
 import com.cdwater.ridego.trip.lifecycle.TripLifecycle;
 import com.cdwater.ridego.trip.lifecycle.TripNotFoundException;
 import com.cdwater.ridego.trip.lifecycle.TripState;
-import com.cdwater.ridego.trip.read.TripReadRepository;
+import com.cdwater.ridego.trip.read.TripReadModel;
 import org.springframework.stereotype.Service;
 
 import java.util.UUID;
@@ -15,11 +15,11 @@ public class TripService {
     private static final String DEFAULT_CITY = "city-1";
 
     private final TripLifecycle lifecycle;
-    private final TripReadRepository readRepository;
+    private final TripReadModel readModel;
 
-    public TripService(TripLifecycle lifecycle, TripReadRepository readRepository) {
+    public TripService(TripLifecycle lifecycle, TripReadModel readModel) {
         this.lifecycle = lifecycle;
-        this.readRepository = readRepository;
+        this.readModel = readModel;
     }
 
     public TripResponse create(String riderId, CreateTripRequest request) {
@@ -33,7 +33,7 @@ public class TripService {
     }
 
     public TripView get(String userId, String driverId, UUID id) {
-        TripView view = readRepository.findById(id).orElseThrow(TripNotFoundException::new);
+        TripView view = readModel.find(id).orElseThrow(TripNotFoundException::new);
         boolean allowed = view.riderId().equals(userId)
                 || (driverId != null && driverId.equals(view.driverId()));
         if (!allowed) {

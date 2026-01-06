@@ -1,5 +1,7 @@
 package com.cdwater.ridego.trip.lifecycle;
 
+import com.cdwater.ridego.contracts.EventTypes;
+
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
@@ -38,5 +40,26 @@ public enum TripState {
 
     public static TripState from(String value) {
         return valueOf(value.toUpperCase(Locale.ROOT));
+    }
+
+    /**
+     * The state a Trip enters after each write-side event.
+     * {@code TripAcceptRejected} does not change state and returns {@code null}.
+     */
+    public static TripState stateOfEvent(String eventType) {
+        return switch (eventType) {
+            case EventTypes.TRIP_REQUESTED -> REQUESTED;
+            case EventTypes.TRIP_MATCHING_STARTED -> MATCHING;
+            case EventTypes.TRIP_OFFERED -> OFFERED;
+            case EventTypes.TRIP_MATCHING_RESTARTED -> MATCHING;
+            case EventTypes.TRIP_DRIVER_CANCELLED -> MATCHING;
+            case EventTypes.TRIP_ACCEPTED -> ACCEPTED;
+            case EventTypes.TRIP_ARRIVED -> ARRIVED;
+            case EventTypes.TRIP_STARTED -> IN_PROGRESS;
+            case EventTypes.TRIP_COMPLETED -> COMPLETED;
+            case EventTypes.TRIP_CANCELLED -> CANCELLED;
+            case EventTypes.TRIP_UNMATCHED -> UNMATCHED;
+            default -> null;
+        };
     }
 }
