@@ -5,11 +5,12 @@ import com.cdwater.ridego.contracts.EventEnvelope;
 import com.cdwater.ridego.contracts.EventEnvelopeCodec;
 import com.cdwater.ridego.contracts.EventTypes;
 import com.cdwater.ridego.contracts.Topics;
+import com.cdwater.ridego.location.presence.PresenceEventSink;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
 
 @Component
-public class PresenceEventPublisher {
+public class PresenceEventPublisher implements PresenceEventSink {
 
     private final KafkaTemplate<String, String> kafkaTemplate;
     private final EventEnvelopeCodec codec;

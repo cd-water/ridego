@@ -1,6 +1,7 @@
 package com.cdwater.ridego.location.geo;
 
 import com.cdwater.ridego.contracts.Topics;
+import com.cdwater.ridego.location.presence.DriverPresence;
 import com.cdwater.ridego.location.trail.TripPosition;
 import com.cdwater.ridego.location.trail.TripTrailBuffer;
 import io.micrometer.core.instrument.Counter;
@@ -17,18 +18,18 @@ import java.util.UUID;
 public class PositionIngestListener {
 
     private final ObjectMapper objectMapper;
-    private final DriverLocationService locationService;
+    private final DriverPresence presence;
     private final ActiveTripRegistry activeTrips;
     private final TripTrailBuffer trailBuffer;
     private final Counter positionsIngested;
 
     public PositionIngestListener(ObjectMapper objectMapper,
-                                  DriverLocationService locationService,
+                                  DriverPresence presence,
                                   ActiveTripRegistry activeTrips,
                                   TripTrailBuffer trailBuffer,
                                   MeterRegistry meterRegistry) {
         this.objectMapper = objectMapper;
-        this.locationService = locationService;
+        this.presence = presence;
         this.activeTrips = activeTrips;
         this.trailBuffer = trailBuffer;
         this.positionsIngested = Counter.builder("ridego.positions.ingested").register(meterRegistry);
@@ -42,7 +43,7 @@ public class PositionIngestListener {
         double lat = node.get("lat").asDouble();
         double lng = node.get("lng").asDouble();
 
-        locationService.ingestPosition(driverId, cityId, lat, lng);
+        presence.recordPosition(driverId, cityId, lat, lng);
         positionsIngested.increment();
 
         String tripId = activeTrips.tripForDriver(driverId);

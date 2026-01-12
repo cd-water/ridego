@@ -1,7 +1,7 @@
 package com.cdwater.ridego.location.web;
 
 import com.cdwater.ridego.contracts.InternalHeaders;
-import com.cdwater.ridego.location.geo.DriverLocationService;
+import com.cdwater.ridego.location.presence.DriverPresence;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -17,12 +17,10 @@ public class LocationController {
 
     private static final String DEFAULT_CITY = "city-1";
 
-    private final DriverLocationService locationService;
-    private final PresenceEventPublisher publisher;
+    private final DriverPresence presence;
 
-    public LocationController(DriverLocationService locationService, PresenceEventPublisher publisher) {
-        this.locationService = locationService;
-        this.publisher = publisher;
+    public LocationController(DriverPresence presence) {
+        this.presence = presence;
     }
 
     @PostMapping("/drivers/{driverId}/presence")
@@ -35,8 +33,11 @@ public class LocationController {
         String cityId = request.cityId() == null || request.cityId().isBlank()
                 ? DEFAULT_CITY
                 : request.cityId();
-        locationService.setPresence(driverId, cityId, request.online());
-        publisher.publish(driverId, cityId, request.online());
+        if (request.online()) {
+            presence.markOnline(driverId, cityId);
+        } else {
+            presence.markOffline(driverId, cityId);
+        }
     }
 
     @GetMapping("/internal/drivers/nearby")
@@ -45,7 +46,7 @@ public class LocationController {
                                  @RequestParam double lng,
                                  @RequestParam(defaultValue = "3") double radiusKm,
                                  @RequestParam(defaultValue = "50") int limit) {
-        return new NearbyResponse(locationService.nearby(cityId, lat, lng, radiusKm, limit).stream()
+        return new NearbyResponse(presence.nearby(cityId, lat, lng, radiusKm, limit).stream()
                 .map(d -> new NearbyResponse.NearbyDriver(d.driverId(), d.distanceMeters()))
                 .toList());
     }

@@ -1,4 +1,4 @@
-package com.cdwater.ridego.location.geo;
+package com.cdwater.ridego.location.presence;
 
 import org.springframework.data.geo.Distance;
 import org.springframework.data.geo.GeoResults;
@@ -9,13 +9,15 @@ import org.springframework.data.redis.connection.RedisGeoCommands.GeoSearchComma
 import org.springframework.data.redis.core.GeoOperations;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.domain.geo.GeoReference;
-import org.springframework.stereotype.Service;
+import org.springframework.stereotype.Component;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 
-@Service
-public class DriverLocationService {
+@Component
+public class RedisDriverPresenceStore implements DriverPresenceStore {
 
     private static final String GEO_KEY_PREFIX = "geo:drivers:";
     private static final String PRESENCE_KEY_PREFIX = "driver:presence:";
@@ -25,43 +27,52 @@ public class DriverLocationService {
 
     private final StringRedisTemplate redis;
 
-    public DriverLocationService(StringRedisTemplate redis) {
+    public RedisDriverPresenceStore(StringRedisTemplate redis) {
         this.redis = redis;
     }
 
-    public void ingestPosition(String driverId, String cityId, double lat, double lng) {
-        geo().add(GEO_KEY_PREFIX + cityId, new Point(lng, lat), driverId);
-        redis.opsForValue().set(LAST_SEEN_KEY_PREFIX + driverId, Instant.now().toString());
-    }
-
-    public void setPresence(String driverId, String cityId, boolean online) {
-        redis.opsForValue().set(PRESENCE_KEY_PREFIX + driverId, online ? "online" : "offline");
+    @Override
+    public void recordOnline(String driverId, String cityId, Instant now) {
+        redis.opsForValue().set(PRESENCE_KEY_PREFIX + driverId, "online");
         redis.opsForValue().set(CITY_KEY_PREFIX + driverId, cityId);
-        if (online) {
-            redis.opsForValue().set(LAST_SEEN_KEY_PREFIX + driverId, Instant.now().toString());
-            redis.opsForSet().add(ONLINE_SET, driverId);
-        } else {
-            redis.opsForSet().remove(ONLINE_SET, driverId);
-            geo().remove(GEO_KEY_PREFIX + cityId, driverId);
-        }
+        redis.opsForValue().set(LAST_SEEN_KEY_PREFIX + driverId, now.toString());
+        redis.opsForSet().add(ONLINE_SET, driverId);
     }
 
-    public java.util.Set<String> onlineDrivers() {
-        java.util.Set<String> members = redis.opsForSet().members(ONLINE_SET);
-        return members == null ? java.util.Set.of() : members;
+    @Override
+    public void recordOffline(String driverId, String cityId) {
+        redis.opsForValue().set(PRESENCE_KEY_PREFIX + driverId, "offline");
+        redis.opsForSet().remove(ONLINE_SET, driverId);
+        geo().remove(GEO_KEY_PREFIX + cityId, driverId);
     }
 
-    public Instant lastSeen(String driverId) {
+    @Override
+    public void recordPosition(String driverId, String cityId, double lat, double lng, Instant now) {
+        geo().add(GEO_KEY_PREFIX + cityId, new Point(lng, lat), driverId);
+        redis.opsForValue().set(LAST_SEEN_KEY_PREFIX + driverId, now.toString());
+    }
+
+    @Override
+    public Set<String> onlineDrivers() {
+        Set<String> members = redis.opsForSet().members(ONLINE_SET);
+        return members == null ? Set.of() : members;
+    }
+
+    @Override
+    public Optional<Instant> lastSeen(String driverId) {
         String value = redis.opsForValue().get(LAST_SEEN_KEY_PREFIX + driverId);
-        return value == null ? null : Instant.parse(value);
+        return value == null ? Optional.empty() : Optional.of(Instant.parse(value));
     }
 
+    @Override
     public String cityOf(String driverId) {
         String cityId = redis.opsForValue().get(CITY_KEY_PREFIX + driverId);
         return cityId == null ? "city-1" : cityId;
     }
 
-    public List<NearbyDriver> nearby(String cityId, double lat, double lng, double radiusKm, int limit) {
+    @Override
+    public List<NearbyDriver> nearby(String cityId, double lat, double lng,
+                                     double radiusKm, int limit) {
         GeoSearchCommandArgs args = GeoSearchCommandArgs.newGeoSearchArgs()
                 .includeDistance()
                 .sortAscending()
@@ -95,8 +106,5 @@ public class DriverLocationService {
 
     private GeoOperations<String, String> geo() {
         return redis.opsForGeo();
-    }
-
-    public record NearbyDriver(String driverId, double distanceMeters) {
     }
 }

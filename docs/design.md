@@ -115,6 +115,7 @@ in_progress → completed
 - `location` 每 10 秒扫描在线集合；`last_seen` 超过 30 秒的司机判为离线，发出 `DriverPresenceChanged(offline)`。
 - 轨迹：`location` 从 `TripStarted` / `TripCompleted` / `TripCancelled` 事件维护"行程中司机"集合，只为这些司机的位置写 PG 轨迹表（按天分区）。
 - 空驶位置只留在 Redis，不落库。
+- `DriverPresence` 模块拥有在线/离线、心跳过期与 nearby 查询：`markOnline` / `markOffline` / `sweepStale` 在同一处修改状态并发出 `DriverPresenceChanged`，控制器与心跳调度只是适配器。
 
 ### 4.5 账单与行程分享
 
