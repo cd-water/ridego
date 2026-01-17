@@ -1,6 +1,8 @@
 package com.cdwater.ridego.dispatch.lifecycle;
 
-public class OfferConflictException extends RuntimeException {
+import com.cdwater.ridego.contracts.ConflictException;
+
+public class OfferConflictException extends ConflictException {
 
     public OfferConflictException(String message) {
         super(message);

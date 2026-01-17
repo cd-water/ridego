@@ -1,4 +1,10 @@
 package com.cdwater.ridego.billing.invoice;
 
-public class InvoiceNotFoundException extends RuntimeException {
+import com.cdwater.ridego.contracts.NotFoundException;
+
+public class InvoiceNotFoundException extends NotFoundException {
+
+    public InvoiceNotFoundException() {
+        super("invoice not found");
+    }
 }

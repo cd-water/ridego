@@ -1,4 +1,10 @@
 package com.cdwater.ridego.trip.lifecycle;
 
-public class TripNotFoundException extends RuntimeException {
+import com.cdwater.ridego.contracts.NotFoundException;
+
+public class TripNotFoundException extends NotFoundException {
+
+    public TripNotFoundException() {
+        super("trip not found");
+    }
 }

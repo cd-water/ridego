@@ -1,4 +1,10 @@
 package com.cdwater.ridego.identity.auth;
 
-public class InvalidCredentialsException extends RuntimeException {
+import com.cdwater.ridego.contracts.UnauthorizedException;
+
+public class InvalidCredentialsException extends UnauthorizedException {
+
+    public InvalidCredentialsException() {
+        super("invalid credentials");
+    }
 }

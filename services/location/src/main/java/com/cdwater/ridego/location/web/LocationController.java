@@ -1,16 +1,14 @@
 package com.cdwater.ridego.location.web;
 
-import com.cdwater.ridego.contracts.InternalHeaders;
+import com.cdwater.ridego.auth.Principal;
+import com.cdwater.ridego.contracts.ForbiddenException;
 import com.cdwater.ridego.location.presence.DriverPresence;
-import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.server.ResponseStatusException;
 
 @RestController
 public class LocationController {
@@ -25,10 +23,10 @@ public class LocationController {
 
     @PostMapping("/drivers/{driverId}/presence")
     public void presence(@PathVariable String driverId,
-                         @RequestHeader(name = InternalHeaders.DRIVER_ID, required = false) String headerDriverId,
+                         Principal principal,
                          @RequestBody PresenceRequest request) {
-        if (!driverId.equals(headerDriverId)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "driver mismatch");
+        if (!driverId.equals(principal.requireDriverId())) {
+            throw new ForbiddenException();
         }
         String cityId = request.cityId() == null || request.cityId().isBlank()
                 ? DEFAULT_CITY

@@ -1,6 +1,8 @@
 package com.cdwater.ridego.trip.lifecycle;
 
-public class TripBadRequestException extends RuntimeException {
+import com.cdwater.ridego.contracts.BadRequestException;
+
+public class TripBadRequestException extends BadRequestException {
 
     public TripBadRequestException(String message) {
         super(message);

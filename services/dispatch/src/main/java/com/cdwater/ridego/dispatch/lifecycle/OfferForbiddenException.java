@@ -1,4 +1,6 @@
 package com.cdwater.ridego.dispatch.lifecycle;
 
-public class OfferForbiddenException extends RuntimeException {
+import com.cdwater.ridego.contracts.ForbiddenException;
+
+public class OfferForbiddenException extends ForbiddenException {
 }

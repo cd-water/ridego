@@ -43,6 +43,10 @@
         </dependency>
         <dependency>
             <groupId>com.cdwater</groupId>
+            <artifactId>web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.cdwater</groupId>
             <artifactId>messaging</artifactId>
         </dependency>
 

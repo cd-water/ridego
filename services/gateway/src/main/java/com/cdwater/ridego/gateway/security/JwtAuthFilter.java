@@ -1,11 +1,8 @@
 package com.cdwater.ridego.gateway.security;
 
+import com.cdwater.ridego.auth.JwtCodec;
+import com.cdwater.ridego.auth.Principal;
 import com.cdwater.ridego.contracts.InternalHeaders;
-import com.cdwater.ridego.contracts.JwtClaims;
-import com.cdwater.ridego.gateway.config.JwtProperties;
-import io.jsonwebtoken.Claims;
-import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.security.Keys;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.core.Ordered;
@@ -16,9 +13,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
-import javax.crypto.SecretKey;
-import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Optional;
 
 @Component
 public class JwtAuthFilter implements GlobalFilter, Ordered {
@@ -29,14 +25,10 @@ public class JwtAuthFilter implements GlobalFilter, Ordered {
             "/actuator"
     );
 
-    private final SecretKey key;
+    private final JwtCodec jwtCodec;
 
-    public JwtAuthFilter(JwtProperties properties) {
-        byte[] secret = properties.secret().getBytes(StandardCharsets.UTF_8);
-        if (secret.length < 32) {
-            throw new IllegalStateException("JWT secret must be at least 32 bytes for HS256");
-        }
-        this.key = Keys.hmacShaKeyFor(secret);
+    public JwtAuthFilter(JwtCodec jwtCodec) {
+        this.jwtCodec = jwtCodec;
     }
 
     @Override
@@ -51,31 +43,27 @@ public class JwtAuthFilter implements GlobalFilter, Ordered {
             return unauthorized(exchange);
         }
 
-        try {
-            Claims claims = Jwts.parser()
-                    .verifyWith(key)
-                    .build()
-                    .parseSignedClaims(authorization.substring("Bearer ".length()))
-                    .getPayload();
-
-            ServerHttpRequest request = exchange.getRequest().mutate()
-                    .headers(headers -> {
-                        headers.remove(InternalHeaders.USER_ID);
-                        headers.remove(InternalHeaders.ROLE);
-                        headers.remove(InternalHeaders.DRIVER_ID);
-                        headers.set(InternalHeaders.USER_ID, claims.getSubject());
-                        headers.set(InternalHeaders.ROLE, claims.get(JwtClaims.ROLE, String.class));
-                        String driverId = claims.get(JwtClaims.DRIVER_ID, String.class);
-                        if (driverId != null) {
-                            headers.set(InternalHeaders.DRIVER_ID, driverId);
-                        }
-                    })
-                    .build();
-
-            return chain.filter(exchange.mutate().request(request).build());
-        } catch (Exception e) {
+        Optional<Principal> principal = jwtCodec.verify(
+                authorization.substring("Bearer ".length()));
+        if (principal.isEmpty()) {
             return unauthorized(exchange);
         }
+
+        Principal authenticated = principal.get();
+        ServerHttpRequest request = exchange.getRequest().mutate()
+                .headers(headers -> {
+                    headers.remove(InternalHeaders.USER_ID);
+                    headers.remove(InternalHeaders.ROLE);
+                    headers.remove(InternalHeaders.DRIVER_ID);
+                    headers.set(InternalHeaders.USER_ID, authenticated.userId());
+                    headers.set(InternalHeaders.ROLE, authenticated.role());
+                    if (authenticated.driverId() != null) {
+                        headers.set(InternalHeaders.DRIVER_ID, authenticated.driverId());
+                    }
+                })
+                .build();
+
+        return chain.filter(exchange.mutate().request(request).build());
     }
 
     private Mono<Void> unauthorized(ServerWebExchange exchange) {

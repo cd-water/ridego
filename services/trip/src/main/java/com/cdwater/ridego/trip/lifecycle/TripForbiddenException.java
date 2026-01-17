@@ -1,4 +1,6 @@
 package com.cdwater.ridego.trip.lifecycle;
 
-public class TripForbiddenException extends RuntimeException {
+import com.cdwater.ridego.contracts.ForbiddenException;
+
+public class TripForbiddenException extends ForbiddenException {
 }

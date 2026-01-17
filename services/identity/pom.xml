@@ -38,22 +38,16 @@
             <artifactId>spring-security-crypto</artifactId>
         </dependency>
         <dependency>
-            <groupId>io.jsonwebtoken</groupId>
-            <artifactId>jjwt-api</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>io.jsonwebtoken</groupId>
-            <artifactId>jjwt-impl</artifactId>
-            <scope>runtime</scope>
-        </dependency>
-        <dependency>
-            <groupId>io.jsonwebtoken</groupId>
-            <artifactId>jjwt-jackson</artifactId>
-            <scope>runtime</scope>
+            <groupId>com.cdwater</groupId>
+            <artifactId>contracts</artifactId>
         </dependency>
         <dependency>
             <groupId>com.cdwater</groupId>
-            <artifactId>contracts</artifactId>
+            <artifactId>web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.cdwater</groupId>
+            <artifactId>auth</artifactId>
         </dependency>
 
         <dependency>

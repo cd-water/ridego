@@ -208,7 +208,7 @@ Driver（经 gateway）：
 - `GET /internal/drivers/nearby?cityId=&lat=&lng=&radius=&limit=`（`location`，仅 `dispatch` 调用）
 - `GET /internal/invoices/{tripId}`（`billing`，可选）
 
-认证：`identity` 签发 HS256 JWT，`sub` = userId，`role` = RIDER / DRIVER，Driver 额外带 `driverId`。`gateway` 校验签名后把 `X-User-Id`、`X-Role`、`X-Driver-Id` 注入内部请求；内部服务信任网关（内网边界）。
+认证：`identity` 签发 HS256 JWT，`sub` = userId，`role` = RIDER / DRIVER，Driver 额外带 `driverId`。`gateway` 校验签名后把 `X-User-Id`、`X-Role`、`X-Driver-Id` 注入内部请求；内部服务信任网关（内网边界）。JWT 编解码统一在 `libs/auth.JwtCodec`；控制器通过 `Principal` 参数获取身份；共享异常类型在 `libs/contracts`，由 `libs/web` 统一映射 HTTP 状态码。
 
 ## 7. 仿真器与验收
 
@@ -247,8 +247,10 @@ seed: 42
 ridego/
 ├── pom.xml                      # 聚合与依赖版本
 ├── libs/
-│   ├── contracts/               # 事件信封、事件 DTO、编解码、JWT claim 常量
-│   └── messaging/               # outbox 仓库/中继、幂等消费（各服务保留自己的表）
+│   ├── contracts/               # 事件信封、事件 DTO、编解码、JWT claim 常量、共享错误类型
+│   ├── messaging/               # outbox 仓库/中继、幂等消费（各服务保留自己的表）
+│   ├── auth/                    # JWT 编解码、Principal
+│   └── web/                     # 共享异常映射、Principal resolver
 ├── services/
 │   ├── pom.xml                  # 聚合
 │   ├── identity/

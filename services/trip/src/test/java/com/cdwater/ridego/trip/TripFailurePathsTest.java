@@ -184,10 +184,16 @@ class TripFailurePathsTest {
 
     private HttpResponse<String> post(String path, String body, String header1, String value1,
                                       String header2, String value2) throws Exception {
-        HttpRequest request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + path))
+        HttpRequest.Builder builder = HttpRequest.newBuilder(
+                        URI.create("http://localhost:" + port + path))
                 .header("Content-Type", "application/json")
                 .header(header1, value1)
-                .header(header2, value2)
+                .header(header2, value2);
+        if (!InternalHeaders.USER_ID.equals(header1)
+                && !InternalHeaders.USER_ID.equals(header2)) {
+            builder.header(InternalHeaders.USER_ID, "test-user");
+        }
+        HttpRequest request = builder
                 .POST(HttpRequest.BodyPublishers.ofString(body))
                 .build();
         return http.send(request, HttpResponse.BodyHandlers.ofString());

@@ -1,15 +1,12 @@
 package com.cdwater.ridego.trip.trip;
 
-import com.cdwater.ridego.contracts.InternalHeaders;
+import com.cdwater.ridego.auth.Principal;
 import com.cdwater.ridego.contracts.Roles;
-import com.cdwater.ridego.trip.web.ForbiddenException;
-import com.cdwater.ridego.trip.web.UnauthorizedException;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
@@ -28,76 +25,43 @@ public class TripController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public TripResponse create(
-            @RequestHeader(name = InternalHeaders.USER_ID, required = false) String userId,
-            @RequestHeader(name = InternalHeaders.ROLE, required = false) String role,
-            @RequestBody CreateTripRequest request) {
-        if (userId == null) {
-            throw new UnauthorizedException();
-        }
-        if (!Roles.RIDER.equals(role)) {
-            throw new ForbiddenException();
-        }
-        return tripService.create(userId, request);
+    public TripResponse create(Principal principal, @RequestBody CreateTripRequest request) {
+        principal.requireRole(Roles.RIDER);
+        return tripService.create(principal.userId(), request);
     }
 
     @GetMapping("/{id}")
-    public TripView get(
-            @RequestHeader(name = InternalHeaders.USER_ID, required = false) String userId,
-            @RequestHeader(name = InternalHeaders.DRIVER_ID, required = false) String driverId,
-            @PathVariable UUID id) {
-        if (userId == null) {
-            throw new UnauthorizedException();
-        }
-        return tripService.get(userId, driverId, id);
+    public TripView get(Principal principal, @PathVariable UUID id) {
+        return tripService.get(principal.userId(), principal.driverId(), id);
     }
 
     @PostMapping("/{id}/cancel")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void cancel(@PathVariable UUID id,
-                       @RequestHeader(name = InternalHeaders.USER_ID, required = false) String userId,
-                       @RequestHeader(name = InternalHeaders.DRIVER_ID, required = false) String driverId,
+    public void cancel(Principal principal,
+                       @PathVariable UUID id,
                        @RequestBody(required = false) CancelTripRequest request) {
-        if (userId == null && driverId == null) {
-            throw new UnauthorizedException();
-        }
         String reason = request == null ? null : request.reason();
-        tripService.cancel(id, userId, driverId, reason);
+        tripService.cancel(id, principal.userId(), principal.driverId(), reason);
     }
 
     @PostMapping("/{id}/arrive")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void arrive(@PathVariable UUID id,
-                       @RequestHeader(name = InternalHeaders.DRIVER_ID, required = false) String driverId,
-                       @RequestHeader(name = InternalHeaders.ROLE, required = false) String role) {
-        requireDriver(driverId, role);
-        tripService.arrive(id, driverId);
+    public void arrive(Principal principal, @PathVariable UUID id) {
+        principal.requireRole(Roles.DRIVER);
+        tripService.arrive(id, principal.requireDriverId());
     }
 
     @PostMapping("/{id}/start")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void start(@PathVariable UUID id,
-                      @RequestHeader(name = InternalHeaders.DRIVER_ID, required = false) String driverId,
-                      @RequestHeader(name = InternalHeaders.ROLE, required = false) String role) {
-        requireDriver(driverId, role);
-        tripService.start(id, driverId);
+    public void start(Principal principal, @PathVariable UUID id) {
+        principal.requireRole(Roles.DRIVER);
+        tripService.start(id, principal.requireDriverId());
     }
 
     @PostMapping("/{id}/complete")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void complete(@PathVariable UUID id,
-                         @RequestHeader(name = InternalHeaders.DRIVER_ID, required = false) String driverId,
-                         @RequestHeader(name = InternalHeaders.ROLE, required = false) String role) {
-        requireDriver(driverId, role);
-        tripService.complete(id, driverId);
-    }
-
-    private void requireDriver(String driverId, String role) {
-        if (driverId == null) {
-            throw new UnauthorizedException();
-        }
-        if (!Roles.DRIVER.equals(role)) {
-            throw new ForbiddenException();
-        }
+    public void complete(Principal principal, @PathVariable UUID id) {
+        principal.requireRole(Roles.DRIVER);
+        tripService.complete(id, principal.requireDriverId());
     }
 }

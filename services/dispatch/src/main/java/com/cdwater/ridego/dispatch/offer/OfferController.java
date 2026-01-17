@@ -1,16 +1,13 @@
 package com.cdwater.ridego.dispatch.offer;
 
-import com.cdwater.ridego.contracts.InternalHeaders;
+import com.cdwater.ridego.auth.Principal;
 import com.cdwater.ridego.contracts.Roles;
 import com.cdwater.ridego.dispatch.lifecycle.OfferLifecycle;
 import com.cdwater.ridego.dispatch.lifecycle.OfferStore;
-import com.cdwater.ridego.dispatch.web.ForbiddenException;
-import com.cdwater.ridego.dispatch.web.UnauthorizedException;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
@@ -32,10 +29,8 @@ public class OfferController {
     }
 
     @GetMapping("/pending")
-    public List<PendingOffer> pending(
-            @RequestHeader(name = InternalHeaders.DRIVER_ID, required = false) String driverId,
-            @RequestHeader(name = InternalHeaders.ROLE, required = false) String role) {
-        requireDriver(driverId, role);
+    public List<PendingOffer> pending(Principal principal) {
+        String driverId = requireDriver(principal);
         return offerStore.pendingForDriver(driverId).stream()
                 .map(offer -> new PendingOffer(
                         offer.getId().toString(),
@@ -46,29 +41,19 @@ public class OfferController {
 
     @PostMapping("/{id}/accept")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void accept(@PathVariable UUID id,
-                       @RequestHeader(name = InternalHeaders.DRIVER_ID, required = false) String driverId,
-                       @RequestHeader(name = InternalHeaders.ROLE, required = false) String role) {
-        requireDriver(driverId, role);
-        offerLifecycle.accept(id, driverId);
+    public void accept(Principal principal, @PathVariable UUID id) {
+        offerLifecycle.accept(id, requireDriver(principal));
     }
 
     @PostMapping("/{id}/reject")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void reject(@PathVariable UUID id,
-                       @RequestHeader(name = InternalHeaders.DRIVER_ID, required = false) String driverId,
-                       @RequestHeader(name = InternalHeaders.ROLE, required = false) String role) {
-        requireDriver(driverId, role);
-        offerLifecycle.reject(id, driverId);
+    public void reject(Principal principal, @PathVariable UUID id) {
+        offerLifecycle.reject(id, requireDriver(principal));
     }
 
-    private void requireDriver(String driverId, String role) {
-        if (driverId == null) {
-            throw new UnauthorizedException();
-        }
-        if (!Roles.DRIVER.equals(role)) {
-            throw new ForbiddenException();
-        }
+    private String requireDriver(Principal principal) {
+        principal.requireRole(Roles.DRIVER);
+        return principal.requireDriverId();
     }
 
     public record PendingOffer(String offerId, String tripId, Instant expiresAt) {

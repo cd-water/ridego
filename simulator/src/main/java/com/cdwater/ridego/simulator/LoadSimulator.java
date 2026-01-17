@@ -189,6 +189,7 @@ public class LoadSimulator {
     private void bringOnline(String driverId) {
         try {
             locationClient.post().uri("/drivers/" + driverId + "/presence")
+                    .header(InternalHeaders.USER_ID, driverId)
                     .header(InternalHeaders.DRIVER_ID, driverId)
                     .header(InternalHeaders.ROLE, Roles.DRIVER)
                     .header("Content-Type", "application/json")
@@ -258,6 +259,7 @@ public class LoadSimulator {
     private boolean postDriver(RestClient client, String path, String driverId) {
         try {
             client.post().uri(path)
+                    .header(InternalHeaders.USER_ID, driverId)
                     .header(InternalHeaders.DRIVER_ID, driverId)
                     .header(InternalHeaders.ROLE, Roles.DRIVER)
                     .header("Content-Type", "application/json")
