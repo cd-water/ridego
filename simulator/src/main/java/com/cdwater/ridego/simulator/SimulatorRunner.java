@@ -1,5 +1,6 @@
 package com.cdwater.ridego.simulator;
 
+import com.cdwater.ridego.contracts.DriverPositionPayload;
 import com.cdwater.ridego.contracts.Topics;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -14,6 +15,7 @@ import org.springframework.web.client.RestClient;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
+import java.time.Instant;
 import java.util.Map;
 
 @Component
@@ -93,6 +95,8 @@ public class SimulatorRunner implements ApplicationRunner {
         log.info("trip {} in progress", tripId);
 
         Thread.sleep(1000);
+        publishPosition(session.driverId());
+        Thread.sleep(500);
         post(session.driverToken(), "/trips/" + tripId + "/complete", Map.of());
 
         JsonNode completed = waitForState(session.riderToken(), tripId, "completed", 20);
@@ -159,10 +163,14 @@ public class SimulatorRunner implements ApplicationRunner {
         log.info("driver {} online at city {}", driverId, cityId);
         post(driverToken, "/drivers/" + driverId + "/presence",
                 Map.of("online", true, "cityId", cityId));
-        kafkaTemplate.send(Topics.DRIVER_POSITIONS, driverId, objectMapper.writeValueAsString(
-                Map.of("driverId", driverId, "cityId", cityId, "lat", pickupLat, "lng", pickupLng)));
+        publishPosition(driverId);
         Thread.sleep(1500);
-        return new Session(riderToken, driverToken);
+        return new Session(riderToken, driverToken, driverId);
+    }
+
+    private void publishPosition(String driverId) {
+        kafkaTemplate.send(Topics.DRIVER_POSITIONS, driverId, objectMapper.writeValueAsString(
+                new DriverPositionPayload(driverId, cityId, pickupLat, pickupLng, Instant.now())));
     }
 
     private String createTrip(String riderToken) {
@@ -248,6 +256,6 @@ public class SimulatorRunner implements ApplicationRunner {
         return objectMapper.readTree(response);
     }
 
-    private record Session(String riderToken, String driverToken) {
+    private record Session(String riderToken, String driverToken, String driverId) {
     }
 }

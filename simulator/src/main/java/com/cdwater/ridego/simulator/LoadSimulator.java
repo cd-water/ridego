@@ -1,5 +1,6 @@
 package com.cdwater.ridego.simulator;
 
+import com.cdwater.ridego.contracts.DriverPositionPayload;
 import com.cdwater.ridego.contracts.EventEnvelope;
 import com.cdwater.ridego.contracts.EventEnvelopeCodec;
 import com.cdwater.ridego.contracts.EventTypes;
@@ -213,7 +214,7 @@ public class LoadSimulator {
                     + ThreadLocalRandom.current().nextDouble(-0.0005, 0.0005);
             try {
                 kafkaTemplate.send(Topics.DRIVER_POSITIONS, driverId, objectMapper.writeValueAsString(
-                        Map.of("driverId", driverId, "cityId", cityId, "lat", lat, "lng", lng)));
+                        new DriverPositionPayload(driverId, cityId, lat, lng, Instant.now())));
                 sent++;
             } catch (Exception e) {
                 log.warn("position send failed for {}: {}", driverId, e.getMessage());

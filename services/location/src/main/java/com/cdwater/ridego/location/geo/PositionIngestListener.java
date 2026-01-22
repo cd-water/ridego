@@ -1,5 +1,6 @@
 package com.cdwater.ridego.location.geo;
 
+import com.cdwater.ridego.contracts.DriverPositionPayload;
 import com.cdwater.ridego.contracts.Topics;
 import com.cdwater.ridego.location.presence.DriverPresence;
 import com.cdwater.ridego.location.trail.TripPosition;
@@ -8,7 +9,6 @@ import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
-import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 import java.time.Instant;
@@ -37,18 +37,23 @@ public class PositionIngestListener {
 
     @KafkaListener(topics = Topics.DRIVER_POSITIONS, groupId = "location-ingest")
     public void onPosition(String message) {
-        JsonNode node = objectMapper.readTree(message);
-        String driverId = node.get("driverId").asText();
-        String cityId = node.hasNonNull("cityId") ? node.get("cityId").asText() : "city-1";
-        double lat = node.get("lat").asDouble();
-        double lng = node.get("lng").asDouble();
+        DriverPositionPayload payload = objectMapper.readValue(
+                message, DriverPositionPayload.class);
 
-        presence.recordPosition(driverId, cityId, lat, lng);
+        String driverId = payload.driverId();
+        String cityId = payload.cityId() == null || payload.cityId().isBlank()
+                ? "city-1"
+                : payload.cityId();
+
+        presence.recordPosition(driverId, cityId, payload.lat(), payload.lng());
         positionsIngested.increment();
 
         String tripId = activeTrips.tripForDriver(driverId);
         if (tripId != null) {
-            trailBuffer.add(new TripPosition(UUID.fromString(tripId), driverId, cityId, lat, lng, Instant.now()));
+            Instant recordedAt = payload.ts() == null ? Instant.now() : payload.ts();
+            trailBuffer.add(new TripPosition(
+                    UUID.fromString(tripId), driverId, cityId,
+                    payload.lat(), payload.lng(), recordedAt));
         }
     }
 }
