@@ -136,7 +136,8 @@ public class LoadSimulator {
         printMetrics();
     }
 
-    @KafkaListener(topics = {Topics.DISPATCH_EVENTS, Topics.TRIP_EVENTS}, groupId = "load-simulator")
+    @KafkaListener(topics = {Topics.DISPATCH_EVENTS, Topics.TRIP_EVENTS},
+            groupId = "load-simulator-#{T(java.util.UUID).randomUUID()}")
     public void onEvent(String message) {
         EventEnvelope<JsonNode> event = codec.decode(message);
 
