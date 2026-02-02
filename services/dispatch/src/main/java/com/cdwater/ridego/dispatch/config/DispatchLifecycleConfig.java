@@ -8,6 +8,9 @@ import com.cdwater.ridego.dispatch.lifecycle.DriverAvailability;
 import com.cdwater.ridego.dispatch.lifecycle.OfferClaim;
 import com.cdwater.ridego.dispatch.lifecycle.OfferLifecycle;
 import com.cdwater.ridego.dispatch.lifecycle.OfferStore;
+import com.cdwater.ridego.dispatch.outbox.DispatchEvents;
+import com.cdwater.ridego.dispatch.outbox.MetricsDispatchEventSink;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -32,10 +35,12 @@ public class DispatchLifecycleConfig {
     public OfferLifecycle offerLifecycle(OfferStore store,
                                          DriverAvailability availability,
                                          OfferClaim claim,
-                                         DispatchEventSink events,
+                                         DispatchEvents dispatchEvents,
+                                         MeterRegistry meterRegistry,
                                          DedupStore dedup,
                                          Clock clock,
                                          @Value("${ridego.matching.offer-ttl-seconds:10}") long offerTtlSeconds) {
+        DispatchEventSink events = new MetricsDispatchEventSink(dispatchEvents, meterRegistry);
         return new OfferLifecycle(store, availability, claim, events, dedup,
                 clock, Duration.ofSeconds(offerTtlSeconds));
     }
