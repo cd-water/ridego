@@ -60,6 +60,23 @@ class DriverAvailabilityTest {
     }
 
     @Test
+    void offeredDriverGoingOfflineKeepsOfferState() {
+        module.markOnline("driver-1", "city-1");
+        module.markOffered("driver-1");
+
+        module.markOffline("driver-1", "city-1");
+        assertEquals(AvailabilityState.OFFERED, store.stateOf("driver-1"));
+        assertEquals(Presence.OFFLINE, store.presenceOf("driver-1"));
+
+        module.markOnline("driver-1", "city-1");
+        assertEquals(AvailabilityState.OFFERED, store.stateOf("driver-1"));
+        assertEquals(Presence.ONLINE, store.presenceOf("driver-1"));
+
+        assertTrue(module.release("driver-1"));
+        assertEquals(AvailabilityState.IDLE, store.stateOf("driver-1"));
+    }
+
+    @Test
     void markOfferedRequiresIdleOnline() {
         assertFalse(module.markOffered("missing"));
 

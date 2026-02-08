@@ -106,8 +106,7 @@ public class DriverAvailabilityModule implements DriverAvailability {
         Presence expectedPresence = availability.presence;
         availability.presence = Presence.OFFLINE;
         availability.cityId = cityId;
-        if (availability.state == AvailabilityState.IDLE
-                || availability.state == AvailabilityState.OFFERED) {
+        if (availability.state == AvailabilityState.IDLE) {
             availability.state = AvailabilityState.OFFLINE;
         }
         return store.save(availability, expectedState, expectedPresence);

@@ -249,10 +249,7 @@ public class TripLifecycle {
     @Transactional
     public void markUnmatched(UUID tripId) {
         Trip trip = load(tripId);
-        if (trip.state == TripState.UNMATCHED) {
-            return;
-        }
-        if (trip.state != TripState.REQUESTED && trip.state != TripState.MATCHING) {
+        if (!trip.state.canTransitionTo(TripState.UNMATCHED)) {
             return;
         }
         Instant now = clock.instant();

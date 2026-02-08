@@ -25,6 +25,7 @@ class TripStateTest {
         assertTrue(TripState.OFFERED.canTransitionTo(TripState.MATCHING));
         assertTrue(TripState.ACCEPTED.canTransitionTo(TripState.MATCHING));
         assertTrue(TripState.ARRIVED.canTransitionTo(TripState.MATCHING));
+        assertTrue(TripState.REQUESTED.canTransitionTo(TripState.UNMATCHED));
         assertTrue(TripState.MATCHING.canTransitionTo(TripState.UNMATCHED));
         assertTrue(TripState.ARRIVED.canTransitionTo(TripState.CANCELLED));
     }

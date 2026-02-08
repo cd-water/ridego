@@ -73,6 +73,7 @@ public class OfferLifecycle {
                 continue;
             }
             if (!availability.markOffered(driverId)) {
+                claim.release(driverId);
                 throw new OfferConflictException(
                         "driver " + driverId + " is no longer available");
             }
@@ -102,6 +103,7 @@ public class OfferLifecycle {
 
         transition(offer, OfferState.ACCEPTED, now);
         if (!availability.markOnTrip(driverId)) {
+            claim.release(driverId);
             throw new OfferConflictException(
                     "driver " + driverId + " is no longer available");
         }

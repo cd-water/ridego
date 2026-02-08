@@ -202,6 +202,7 @@ class OfferLifecycleTest {
         assertThrows(OfferConflictException.class,
                 () -> lifecycle.attemptOffer(TRIP_ID, CITY, EVENT_ID, List.of("driver-1")));
         assertEquals(List.of(EventTypes.MATCHING_STARTED), sink.types());
+        assertTrue(claim.claimed.isEmpty(), "claim must be released when markOffered fails");
     }
 
     @Test
@@ -212,6 +213,7 @@ class OfferLifecycleTest {
 
         assertThrows(OfferConflictException.class, () -> lifecycle.accept(offerId, "driver-1"));
         assertEquals(0, sink.count(EventTypes.OFFER_ACCEPTED));
+        assertTrue(claim.claimed.isEmpty(), "claim must be released when markOnTrip fails");
     }
 
     @Test

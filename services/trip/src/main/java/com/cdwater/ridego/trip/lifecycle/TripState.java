@@ -19,7 +19,7 @@ public enum TripState {
     UNMATCHED;
 
     private static final Map<TripState, Set<TripState>> ALLOWED = Map.of(
-            REQUESTED, Set.of(MATCHING, CANCELLED),
+            REQUESTED, Set.of(MATCHING, UNMATCHED, CANCELLED),
             MATCHING, Set.of(OFFERED, UNMATCHED, CANCELLED),
             OFFERED, Set.of(ACCEPTED, MATCHING, CANCELLED),
             ACCEPTED, Set.of(ARRIVED, MATCHING, CANCELLED),

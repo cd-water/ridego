@@ -42,7 +42,7 @@ v1 不做：ETA / 路径规划、双向评价、拼车、预约、动态调价�
 数据所有权规则：
 - 只有拥有者可以写自己的数据；跨服务读取一律通过 API 或事件。
 - `dispatch` 不直读 Redis GEO；它调用 `location` 的查询 API（ADR-0003）。
-- `dispatch` 拥有司机可用性（IDLE / OFFERED / ON_TRIP），`location` 只负责位置与在线 / 离线。
+- `dispatch` 拥有司机可用性（IDLE / OFFERED / ON_TRIP / OFFLINE），`location` 只负责位置与在线 / 离线。
 - `dispatch` 的 `DriverAvailability` 模块把 presence 与可用性状态分开存储；Offer 结束时的 release 依据 presence 回到 IDLE 或 OFFLINE，避免把离线司机复活为可派单状态。
 
 ## 3. Trip 状态机
@@ -61,7 +61,7 @@ v1 不做：ETA / 路径规划、双向评价、拼车、预约、动态调价�
 合法转移：
 
 ```
-requested   → matching | cancelled
+requested   → matching | unmatched | cancelled
 matching    → offered | unmatched | cancelled
 offered     → accepted | matching(拒绝/超时) | cancelled
 accepted    → arrived | matching(司机取消) | cancelled
@@ -144,7 +144,7 @@ in_progress → completed
 
 - 写模型使用状态 CAS（`WHERE state = expected`）；`version` 单调递增，用于审计。状态变更与 outbox 记录在同一事务，先 save 后发事件。
 - outbox 轮询投递器每 500 ms 扫描并发布到 Kafka；至少一次投递。
-- 所有消费者按 `eventId` 幂等（`processed_events` 主键去重）。
+- 有副作用的消费者按 `eventId` 去重（`processed_events` 主键）；状态守卫型/天然幂等的消费者（Trip/Offer 意图、presence、轨迹注册）以幂等操作为准。
 - 司机分配：`dispatch` 的 PG 唯一约束（司机上只能有一条活跃 Offer / 活跃 Trip 引用）+ Redis `SET NX EX` 抢占键；两者都成功才发 Offer，失败方回滚。
 - 补偿：`TripAcceptRejected` 让 `dispatch` 释放司机；`TripCancelled` / `TripUnmatched` 让 `dispatch` 关闭未决 Offer。
 - Trip 读模型由 `TripReadModel` 模块拥有：事件→状态映射在 `TripState.stateOfEvent`，监听器只做解码与幂等转发。
@@ -325,7 +325,7 @@ ridego/
 ## 12. 可观测性与运维
 
 - 所有服务接入 Spring Boot Actuator + Micrometer，暴露 `/actuator/prometheus`。
-- 业务指标：`ridego.trips.created/completed/cancelled/unmatched`、`ridego.offers.created/accepted/rejected/expired`、`ridego.positions.ingested`、`ridego.invoices.paid`。
+- 业务指标：`ridego.trips.requested/completed/cancelled/unmatched`、`ridego.offers.issued/accepted/rejected/expired`、`ridego.positions.ingested`、`ridego.invoices.paid`、`ridego.trip.intents.rejected`。
 - Prometheus 抓取宿主机上的 6 个服务（`host.docker.internal`），规则见 `ops/prometheus/alerts.yml`：
   - 服务不可用、5xx 比例、p95 延迟、Kafka 消费积压。
 - Grafana 预置 Prometheus 数据源与 `RideGo` 看板，位于 `ops/grafana/`。

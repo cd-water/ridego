@@ -1,6 +1,7 @@
 package com.cdwater.ridego.trip.listener;
 
 import com.cdwater.ridego.contracts.EventEnvelope;
+import com.cdwater.ridego.contracts.EventEnvelopeCodec;
 import com.cdwater.ridego.contracts.EventTypes;
 import com.cdwater.ridego.contracts.OfferLifecyclePayload;
 import com.cdwater.ridego.contracts.Topics;
@@ -15,7 +16,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
-import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
@@ -26,13 +26,16 @@ public class DispatchEventListener {
 
     private static final Logger log = LoggerFactory.getLogger(DispatchEventListener.class);
 
+    private final EventEnvelopeCodec codec;
     private final ObjectMapper objectMapper;
     private final TripLifecycle lifecycle;
     private final Counter rejected;
 
-    public DispatchEventListener(ObjectMapper objectMapper,
+    public DispatchEventListener(EventEnvelopeCodec codec,
+                                 ObjectMapper objectMapper,
                                  TripLifecycle lifecycle,
                                  MeterRegistry meterRegistry) {
+        this.codec = codec;
         this.objectMapper = objectMapper;
         this.lifecycle = lifecycle;
         this.rejected = Counter.builder("ridego.trip.intents.rejected").register(meterRegistry);
@@ -40,9 +43,7 @@ public class DispatchEventListener {
 
     @KafkaListener(topics = Topics.DISPATCH_EVENTS, groupId = "trip-dispatch-events")
     public void onDispatchEvent(String message) {
-        EventEnvelope<JsonNode> event = objectMapper.readValue(
-                message, new TypeReference<EventEnvelope<JsonNode>>() {
-                });
+        EventEnvelope<JsonNode> event = codec.decode(message);
 
         switch (event.eventType()) {
             case EventTypes.MATCHING_STARTED -> apply(() ->

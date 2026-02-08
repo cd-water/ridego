@@ -41,7 +41,11 @@ Trip 与司机可见性的隔离边界；跨城市的 Trip 与司机互不可见
 _Avoid_: Region, Zone
 
 **Driver Presence（司机在线状态）**:
-司机是否可被 Dispatch 考虑的状态：offline、online、on-trip。
+司机是否在线：ONLINE / OFFLINE。
+_Avoid_: Status
+
+**Driver Availability（司机可用性）**:
+司机能否被 Dispatch 考虑的状态：IDLE、OFFERED、ON_TRIP、OFFLINE。
 _Avoid_: Status
 
 **Fare（车费）**:

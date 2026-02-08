@@ -146,6 +146,16 @@ class TripLifecycleTest {
     }
 
     @Test
+    void requestedTripCanTimeOutToUnmatched() {
+        UUID id = request();
+
+        lifecycle.markUnmatched(id);
+
+        assertEquals(TripState.UNMATCHED, store.load(id).orElseThrow().getState());
+        assertEquals(1, sink.count(EventTypes.TRIP_UNMATCHED));
+    }
+
+    @Test
     void invalidCoordinatesAreRejected() {
         assertThrows(TripBadRequestException.class,
                 () -> lifecycle.request("rider-1", "city-1", 100, 121.47, 31.24, 121.49));
