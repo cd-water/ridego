@@ -29,6 +29,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
@@ -156,7 +157,11 @@ public class LoadSimulator {
                 }
                 String offerId = payload.get("offerId").asText();
                 String driverId = payload.get("driverId").asText();
-                offerExecutor.submit(() -> drive(offerId, tripId, driverId));
+                try {
+                    offerExecutor.submit(() -> drive(offerId, tripId, driverId));
+                } catch (RejectedExecutionException ignored) {
+                    // the run is shutting down; late offers are not driven
+                }
             }
             case EventTypes.TRIP_COMPLETED -> {
                 completed.incrementAndGet();
