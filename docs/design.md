@@ -120,8 +120,10 @@ in_progress → completed
 
 ### 4.5 账单与行程分享
 
-- `billing` 消费 `TripCompleted`，按 `tripId` 幂等生成 0 元 Invoice，发出 `InvoiceIssued`，随后模拟支付成功发出 `InvoicePaid`。
-- `billing` 消费 `TripCancelled` 时只记录（v1 无取消费）；真实计价规则后期替换计算器。
+- Invoice 生命周期由 `InvoiceModule` 拥有：`issue(trip, eventId)` 幂等生成账单并发出 `InvoiceIssued`，`pay(invoiceId)` 把 `ISSUED` 推进到 `PAID` 并发出 `InvoicePaid`；两步各自一个事务，中途崩溃时重投只会补上支付。
+- 计价规则藏在 `FarePolicy` 接缝后，v1 为 `ZeroFarePolicy`；替换为真实计价不影响模块其余部分。
+- 读路径为 `findForRider(tripId, riderId)`，只返回当前 Rider 自己的账单；监听器与控制器都是薄适配器。
+- `billing` 消费 `TripCompleted` 时串起 `issue` 与 `pay`；v1 无取消费，`TripCancelled` 暂不产生账单。
 - Rider 可创建分享令牌；公开接口以只读方式返回 Trip 的状态投影，令牌可设过期时间。
 
 ## 5. 数据与一致性

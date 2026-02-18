@@ -15,14 +15,14 @@ public class TripCompletedListener {
 
     private final EventEnvelopeCodec codec;
     private final ObjectMapper objectMapper;
-    private final InvoiceService invoiceService;
+    private final InvoiceModule invoiceModule;
 
     public TripCompletedListener(EventEnvelopeCodec codec,
                                  ObjectMapper objectMapper,
-                                 InvoiceService invoiceService) {
+                                 InvoiceModule invoiceModule) {
         this.codec = codec;
         this.objectMapper = objectMapper;
-        this.invoiceService = invoiceService;
+        this.invoiceModule = invoiceModule;
     }
 
     @KafkaListener(topics = Topics.TRIP_EVENTS, groupId = "billing")
@@ -33,6 +33,7 @@ public class TripCompletedListener {
         }
         TripCompletedPayload payload = objectMapper.treeToValue(
                 event.payload(), TripCompletedPayload.class);
-        invoiceService.onTripCompleted(payload, event.eventId());
+        Invoice invoice = invoiceModule.issue(payload, event.eventId());
+        invoiceModule.pay(invoice.getId());
     }
 }

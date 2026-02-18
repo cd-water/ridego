@@ -12,20 +12,21 @@ import java.util.UUID;
 @RequestMapping("/invoices")
 public class InvoiceController {
 
-    private final InvoiceService invoiceService;
+    private final InvoiceModule invoiceModule;
 
-    public InvoiceController(InvoiceService invoiceService) {
-        this.invoiceService = invoiceService;
+    public InvoiceController(InvoiceModule invoiceModule) {
+        this.invoiceModule = invoiceModule;
     }
 
     @GetMapping("/{tripId}")
     public InvoiceResponse get(Principal principal, @PathVariable UUID tripId) {
-        InvoiceService.Invoice invoice = invoiceService.findByTripId(tripId, principal.userId());
+        Invoice invoice = invoiceModule.findForRider(tripId, principal.userId())
+                .orElseThrow(InvoiceNotFoundException::new);
         return new InvoiceResponse(
-                invoice.id().toString(),
-                invoice.tripId().toString(),
-                invoice.amountCents(),
-                invoice.state());
+                invoice.getId().toString(),
+                invoice.getTripId().toString(),
+                invoice.getAmountCents(),
+                invoice.getState().wireValue());
     }
 
     public record InvoiceResponse(String invoiceId, String tripId, int amountCents, String state) {
