@@ -4,7 +4,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.util.UUID;
 
-public class ProcessedEvents {
+public class ProcessedEvents implements EventDedup {
 
     private final JdbcTemplate jdbc;
 
@@ -12,9 +12,7 @@ public class ProcessedEvents {
         this.jdbc = jdbc;
     }
 
-    /**
-     * @return true when this consumer has not processed the event before
-     */
+    @Override
     public boolean markOnce(String consumer, String eventId) {
         return jdbc.update("""
                         INSERT INTO processed_events (consumer, event_id, processed_at)

@@ -1,39 +1,31 @@
 package com.cdwater.ridego.billing.invoice;
 
-import com.cdwater.ridego.contracts.EventEnvelope;
 import com.cdwater.ridego.contracts.EventEnvelopeCodec;
 import com.cdwater.ridego.contracts.EventTypes;
 import com.cdwater.ridego.contracts.Topics;
 import com.cdwater.ridego.contracts.TripCompletedPayload;
+import com.cdwater.ridego.messaging.EventConsumer;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
-import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.ObjectMapper;
 
 @Component
 public class TripCompletedListener {
 
-    private final EventEnvelopeCodec codec;
-    private final ObjectMapper objectMapper;
     private final InvoiceModule invoiceModule;
+    private final EventConsumer consumer;
 
-    public TripCompletedListener(EventEnvelopeCodec codec,
-                                 ObjectMapper objectMapper,
-                                 InvoiceModule invoiceModule) {
-        this.codec = codec;
-        this.objectMapper = objectMapper;
+    public TripCompletedListener(EventEnvelopeCodec codec, InvoiceModule invoiceModule) {
         this.invoiceModule = invoiceModule;
+        this.consumer = new EventConsumer(codec, "billing")
+                .on(EventTypes.TRIP_COMPLETED, TripCompletedPayload.class, event -> {
+                    Invoice invoice = invoiceModule.issue(
+                            event.payload(), event.eventId());
+                    invoiceModule.pay(invoice.getId());
+                });
     }
 
     @KafkaListener(topics = Topics.TRIP_EVENTS, groupId = "billing")
     public void onTripEvent(String message) {
-        EventEnvelope<JsonNode> event = codec.decode(message);
-        if (!EventTypes.TRIP_COMPLETED.equals(event.eventType())) {
-            return;
-        }
-        TripCompletedPayload payload = objectMapper.treeToValue(
-                event.payload(), TripCompletedPayload.class);
-        Invoice invoice = invoiceModule.issue(payload, event.eventId());
-        invoiceModule.pay(invoice.getId());
+        consumer.consume(message);
     }
 }

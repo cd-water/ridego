@@ -149,7 +149,8 @@ in_progress → completed
 - 有副作用的消费者按 `eventId` 去重（`processed_events` 主键）；状态守卫型/天然幂等的消费者（Trip/Offer 意图、presence、轨迹注册）以幂等操作为准。
 - 司机分配：`dispatch` 的 PG 唯一约束（司机上只能有一条活跃 Offer / 活跃 Trip 引用）+ Redis `SET NX EX` 抢占键；两者都成功才发 Offer，失败方回滚。
 - 补偿：`TripAcceptRejected` 让 `dispatch` 释放司机；`TripCancelled` / `TripUnmatched` 让 `dispatch` 关闭未决 Offer。
-- Trip 读模型由 `TripReadModel` 模块拥有：事件→状态映射在 `TripState.stateOfEvent`，监听器只做解码与幂等转发。
+- 信封消费者统一经 `libs/messaging` 的 `EventConsumer`：一次解码、按事件类型绑定 payload、未注册类型 DEBUG 跳过、可选 `EventDedup` 去重（需在调用方事务内）；监听器只保留 `@KafkaListener` 订阅与 handler 注册。位置摄入直接消费 `DriverPositionPayload` 裸数据，是文档化例外。
+- Trip 读模型由 `TripReadModel` 模块拥有：事件→状态映射在 `TripState.stateOfEvent`，监听器只做订阅与幂等转发。
 
 ### 5.3 Redis
 
@@ -251,7 +252,7 @@ ridego/
 ├── pom.xml                      # 聚合与依赖版本
 ├── libs/
 │   ├── contracts/               # 事件信封、事件 DTO、编解码、JWT claim 常量、共享错误类型
-│   ├── messaging/               # outbox 仓库/中继、幂等消费（各服务保留自己的表）
+│   ├── messaging/               # outbox 仓库/中继、幂等消费、类型化事件消费者（各服务保留自己的表）
 │   ├── auth/                    # JWT 编解码、Principal
 │   └── web/                     # 共享异常映射、Principal resolver
 ├── services/
@@ -310,7 +311,7 @@ ridego/
 
 ## 10. 测试策略
 
-- 单元测试：Trip 状态机合法 / 非法转移、司机可用性转移、Offer 选择与排除逻辑、事件信封序列化。
+- 单元测试：Trip 状态机合法 / 非法转移、司机可用性转移、Offer 选择与排除逻辑、事件信封序列化、事件消费者路由与去重。
 - 集成测试：每服务 Testcontainers（PG / Redis / Kafka）；覆盖 outbox 投递、幂等消费、并发抢占。
 - 端到端：仿真器按第 7 节场景运行并断言验收基线。
 - 合同：`libs/contracts` 的事件信封与事件类型有 schema 测试，防止生产者 / 消费者漂移。

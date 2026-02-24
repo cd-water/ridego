@@ -23,7 +23,10 @@ public class EventEnvelopeCodec {
     }
 
     public <P> EventEnvelope<P> decode(String message, Class<P> payloadType) {
-        EventEnvelope<JsonNode> raw = decode(message);
+        return bind(decode(message), payloadType);
+    }
+
+    public <P> EventEnvelope<P> bind(EventEnvelope<JsonNode> raw, Class<P> payloadType) {
         P payload = objectMapper.treeToValue(raw.payload(), payloadType);
         return new EventEnvelope<>(
                 raw.eventId(), raw.eventType(), raw.eventVersion(), raw.occurredAt(),

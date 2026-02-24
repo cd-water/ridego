@@ -1,12 +1,13 @@
 package com.cdwater.ridego.simulator;
 
 import com.cdwater.ridego.contracts.DriverPositionPayload;
-import com.cdwater.ridego.contracts.EventEnvelope;
 import com.cdwater.ridego.contracts.EventEnvelopeCodec;
 import com.cdwater.ridego.contracts.EventTypes;
 import com.cdwater.ridego.contracts.InternalHeaders;
+import com.cdwater.ridego.contracts.OfferLifecyclePayload;
 import com.cdwater.ridego.contracts.Roles;
 import com.cdwater.ridego.contracts.Topics;
+import com.cdwater.ridego.messaging.EventConsumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -15,7 +16,6 @@ import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
-import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 import java.time.Clock;
@@ -47,7 +47,7 @@ public class LoadSimulator {
     private final RestClient tripClient;
     private final KafkaTemplate<String, String> kafkaTemplate;
     private final ObjectMapper objectMapper;
-    private final EventEnvelopeCodec codec;
+    private final EventConsumer consumer;
 
     @Value("${ridego.simulator.load.drivers:10000}")
     private int drivers;
@@ -103,7 +103,38 @@ public class LoadSimulator {
         this.tripClient = RestClient.create(tripUrl);
         this.kafkaTemplate = kafkaTemplate;
         this.objectMapper = objectMapper;
-        this.codec = new EventEnvelopeCodec(objectMapper, Clock.systemUTC());
+        this.consumer = new EventConsumer(
+                new EventEnvelopeCodec(objectMapper, Clock.systemUTC()), "load-simulator")
+                .on(EventTypes.TRIP_REQUESTED, event -> {
+                    tripsCreated.incrementAndGet();
+                    requestedAt.put(event.aggregateId(), event.occurredAt());
+                })
+                .on(EventTypes.OFFER_CREATED, OfferLifecyclePayload.class, event -> {
+                    offers.incrementAndGet();
+                    OfferLifecyclePayload payload = event.payload();
+                    Instant requested = requestedAt.get(payload.tripId());
+                    if (requested != null) {
+                        matchLatenciesMs.add(Duration.between(requested, event.occurredAt()).toMillis());
+                    }
+                    try {
+                        offerExecutor.submit(() ->
+                                drive(payload.offerId(), payload.tripId(), payload.driverId()));
+                    } catch (RejectedExecutionException ignored) {
+                        // the run is shutting down; late offers are not driven
+                    }
+                })
+                .on(EventTypes.TRIP_COMPLETED, event -> {
+                    completed.incrementAndGet();
+                    requestedAt.remove(event.aggregateId());
+                })
+                .on(EventTypes.TRIP_UNMATCHED, event -> {
+                    unmatched.incrementAndGet();
+                    requestedAt.remove(event.aggregateId());
+                })
+                .on(EventTypes.TRIP_CANCELLED, event -> {
+                    cancelled.incrementAndGet();
+                    requestedAt.remove(event.aggregateId());
+                });
     }
 
     public void run() throws Exception {
@@ -140,44 +171,7 @@ public class LoadSimulator {
     @KafkaListener(topics = {Topics.DISPATCH_EVENTS, Topics.TRIP_EVENTS},
             groupId = "load-simulator-#{T(java.util.UUID).randomUUID()}")
     public void onEvent(String message) {
-        EventEnvelope<JsonNode> event = codec.decode(message);
-
-        switch (event.eventType()) {
-            case EventTypes.TRIP_REQUESTED -> {
-                tripsCreated.incrementAndGet();
-                requestedAt.put(event.aggregateId(), event.occurredAt());
-            }
-            case EventTypes.OFFER_CREATED -> {
-                offers.incrementAndGet();
-                JsonNode payload = event.payload();
-                String tripId = payload.get("tripId").asText();
-                Instant requested = requestedAt.get(tripId);
-                if (requested != null) {
-                    matchLatenciesMs.add(Duration.between(requested, event.occurredAt()).toMillis());
-                }
-                String offerId = payload.get("offerId").asText();
-                String driverId = payload.get("driverId").asText();
-                try {
-                    offerExecutor.submit(() -> drive(offerId, tripId, driverId));
-                } catch (RejectedExecutionException ignored) {
-                    // the run is shutting down; late offers are not driven
-                }
-            }
-            case EventTypes.TRIP_COMPLETED -> {
-                completed.incrementAndGet();
-                requestedAt.remove(event.aggregateId());
-            }
-            case EventTypes.TRIP_UNMATCHED -> {
-                unmatched.incrementAndGet();
-                requestedAt.remove(event.aggregateId());
-            }
-            case EventTypes.TRIP_CANCELLED -> {
-                cancelled.incrementAndGet();
-                requestedAt.remove(event.aggregateId());
-            }
-            default -> {
-            }
-        }
+        consumer.consume(message);
     }
 
     private void bringDriversOnline() throws Exception {

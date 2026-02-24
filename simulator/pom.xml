@@ -24,6 +24,10 @@
             <groupId>com.cdwater</groupId>
             <artifactId>contracts</artifactId>
         </dependency>
+        <dependency>
+            <groupId>com.cdwater</groupId>
+            <artifactId>messaging</artifactId>
+        </dependency>
     </dependencies>
 
     <build>
