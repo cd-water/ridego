@@ -74,6 +74,11 @@ SIM_SCENARIO=heartbeat java -jar simulator/target/simulator-0.0.1-SNAPSHOT.jar
 SIM_SCENARIO=load \
   SIM_DRIVERS=10000 SIM_TRIP_RATE=100 SIM_DURATION_MINUTES=2 \
   java -jar simulator/target/simulator-0.0.1-SNAPSHOT.jar
+
+# 可复现与失败注入（默认值即设计基线）
+SIM_SEED=42 SIM_DRIVER_REJECT_RATE=0.1 SIM_RIDER_CANCEL_RATE=0.05 \
+  SIM_SCENARIO=load SIM_DRIVERS=1000 SIM_DURATION_MINUTES=1 \
+  java -jar simulator/target/simulator-0.0.1-SNAPSHOT.jar
 ```
 
 ## 5. 可观测性

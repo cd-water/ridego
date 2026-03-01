@@ -221,16 +221,17 @@ Driver（经 gateway）：
 场景配置：
 ```yaml
 city: city-1
-grid: { widthKm: 20, heightKm: 20 }
 drivers: 10000
-driverSpeedKmh: 30
 gpsIntervalSeconds: 3
 tripRatePerMinute: 100
+inProgressSeconds: 5
 riderCancelRate: 0.05
 driverRejectRate: 0.1
 durationMinutes: 30
 seed: 42
 ```
+
+GPS 坐标由网格 + 按 `(seed, driverIndex, tick)` 派生的抖动生成；接单/拒绝/取消决策按 `(seed, tripId)` 派生，因此同一 seed 可复现，且多线程下不受调度顺序影响。
 
 接入方式：
 - 司机 GPS 直接写 Kafka `location.driver-positions.v1`（模拟设备遥测）。
@@ -243,7 +244,7 @@ seed: 42
 - 无司机重复分配（同一司机不得同时存在两条活跃 Offer / Trip）。
 - 事件 → 状态传播 p95 < 1 秒。
 - GPS 摄入到 Redis 可查询 p95 < 2 秒。
-- 输出匹配成功率、Offer 延迟、状态传播延迟、失败原因分布。
+- 输出 `matchRate`（offers/requested）、`completionRate`（completed/requested）、Offer 匹配延迟 p95、accept→事件传播 p95，以及拒绝/取消/接单失败计数。
 
 ## 8. 技术栈与模块布局
 
@@ -263,7 +264,7 @@ ridego/
 │   ├── location/
 │   ├── billing/
 │   └── gateway/
-├── simulator/
+├── simulator/                   # 场景编排；Fleet / Client / Metrics 三个模块
 └── ops/
     ├── docker-compose.yml
     └── .env.example

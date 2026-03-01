@@ -46,3 +46,7 @@ ridego:
       dropoff-lat: ${SIM_DROPOFF_LAT:31.2400}
       dropoff-lng: ${SIM_DROPOFF_LNG:121.4900}
       in-progress-seconds: ${SIM_IN_PROGRESS_SECONDS:5}
+      seed: ${SIM_SEED:42}
+      jitter-degrees: ${SIM_JITTER_DEGREES:0.0005}
+      driver-reject-rate: ${SIM_DRIVER_REJECT_RATE:0.1}
+      rider-cancel-rate: ${SIM_RIDER_CANCEL_RATE:0.05}

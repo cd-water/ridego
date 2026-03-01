@@ -1,56 +1,49 @@
 package com.cdwater.ridego.simulator;
 
-import com.cdwater.ridego.contracts.DriverPositionPayload;
 import com.cdwater.ridego.contracts.EventEnvelopeCodec;
 import com.cdwater.ridego.contracts.EventTypes;
-import com.cdwater.ridego.contracts.InternalHeaders;
 import com.cdwater.ridego.contracts.OfferLifecyclePayload;
-import com.cdwater.ridego.contracts.Roles;
 import com.cdwater.ridego.contracts.Topics;
 import com.cdwater.ridego.messaging.EventConsumer;
+import com.cdwater.ridego.simulator.client.RideGoClient;
+import com.cdwater.ridego.simulator.fleet.DriverFleet;
+import com.cdwater.ridego.simulator.metrics.RunMetrics;
+import com.cdwater.ridego.simulator.scenario.Scenario;
+import com.cdwater.ridego.simulator.scenario.SimulatorSettings;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.kafka.annotation.KafkaListener;
-import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
-import org.springframework.web.client.RestClient;
-import tools.jackson.databind.ObjectMapper;
 
 import java.time.Clock;
-import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicLong;
 
-@Component
+@Component("load")
 @ConditionalOnProperty(prefix = "ridego.simulator", name = "scenario", havingValue = "load")
-public class LoadSimulator {
+public class LoadSimulator implements Scenario {
 
     private static final Logger log = LoggerFactory.getLogger(LoadSimulator.class);
 
-    private final RestClient gateway;
-    private final RestClient locationClient;
-    private final RestClient dispatchClient;
-    private final RestClient tripClient;
-    private final KafkaTemplate<String, String> kafkaTemplate;
-    private final ObjectMapper objectMapper;
+    private static final int SALT_REJECT = 1;
+    private static final int SALT_CANCEL = 2;
+
+    private final RideGoClient client;
+    private final DriverFleet fleet;
+    private final RunMetrics metrics;
+    private final SimulatorSettings settings;
+    private final Clock clock;
     private final EventConsumer consumer;
 
-    @Value("${ridego.simulator.load.drivers:10000}")
-    private int drivers;
     @Value("${ridego.simulator.load.gps-interval-seconds:3}")
     private int gpsIntervalSeconds;
     @Value("${ridego.simulator.load.trip-rate-per-minute:100}")
@@ -67,55 +60,34 @@ public class LoadSimulator {
     private double dropoffLng;
     @Value("${ridego.simulator.load.in-progress-seconds:5}")
     private int inProgressSeconds;
-    @Value("${ridego.simulator.city-id:city-1}")
-    private String cityId;
-    @Value("${ridego.simulator.rider.username:rider1}")
-    private String riderUsername;
-    @Value("${ridego.simulator.rider.password:ridego}")
-    private String riderPassword;
-
-    private final List<String> driverIds = new ArrayList<>();
-    private final Map<String, Instant> requestedAt = new ConcurrentHashMap<>();
-    private final List<Long> matchLatenciesMs = Collections.synchronizedList(new ArrayList<>());
-    private final AtomicLong tripsCreated = new AtomicLong();
-    private final AtomicLong offers = new AtomicLong();
-    private final AtomicLong completed = new AtomicLong();
-    private final AtomicLong unmatched = new AtomicLong();
-    private final AtomicLong cancelled = new AtomicLong();
-    private final AtomicLong acceptFailures = new AtomicLong();
-    private final AtomicLong gpsSent = new AtomicLong();
+    @Value("${ridego.simulator.load.driver-reject-rate:0.1}")
+    private double driverRejectRate;
+    @Value("${ridego.simulator.load.rider-cancel-rate:0.05}")
+    private double riderCancelRate;
 
     private ExecutorService offerExecutor;
     private ExecutorService presenceExecutor;
     private ScheduledExecutorService scheduler;
     private String riderToken;
-    private int gridSide = 1;
+    private long gpsTick;
 
-    public LoadSimulator(KafkaTemplate<String, String> kafkaTemplate,
-                         ObjectMapper objectMapper,
-                         @Value("${ridego.gateway-url:http://localhost:8080/api/v1}") String gatewayUrl,
-                         @Value("${ridego.simulator.location-url:http://localhost:8084}") String locationUrl,
-                         @Value("${ridego.simulator.dispatch-url:http://localhost:8083}") String dispatchUrl,
-                         @Value("${ridego.simulator.trip-url:http://localhost:8082}") String tripUrl) {
-        this.gateway = RestClient.create(gatewayUrl);
-        this.locationClient = RestClient.create(locationUrl);
-        this.dispatchClient = RestClient.create(dispatchUrl);
-        this.tripClient = RestClient.create(tripUrl);
-        this.kafkaTemplate = kafkaTemplate;
-        this.objectMapper = objectMapper;
-        this.consumer = new EventConsumer(
-                new EventEnvelopeCodec(objectMapper, Clock.systemUTC()), "load-simulator")
-                .on(EventTypes.TRIP_REQUESTED, event -> {
-                    tripsCreated.incrementAndGet();
-                    requestedAt.put(event.aggregateId(), event.occurredAt());
-                })
+    public LoadSimulator(RideGoClient client,
+                         DriverFleet fleet,
+                         RunMetrics metrics,
+                         SimulatorSettings settings,
+                         Clock clock,
+                         EventEnvelopeCodec codec) {
+        this.client = client;
+        this.fleet = fleet;
+        this.metrics = metrics;
+        this.settings = settings;
+        this.clock = clock;
+        this.consumer = new EventConsumer(codec, "load-simulator")
+                .on(EventTypes.TRIP_REQUESTED, event ->
+                        metrics.tripRequested(event.aggregateId(), event.occurredAt()))
                 .on(EventTypes.OFFER_CREATED, OfferLifecyclePayload.class, event -> {
-                    offers.incrementAndGet();
                     OfferLifecyclePayload payload = event.payload();
-                    Instant requested = requestedAt.get(payload.tripId());
-                    if (requested != null) {
-                        matchLatenciesMs.add(Duration.between(requested, event.occurredAt()).toMillis());
-                    }
+                    metrics.offerCreated(payload.tripId(), event.occurredAt());
                     try {
                         offerExecutor.submit(() ->
                                 drive(payload.offerId(), payload.tripId(), payload.driverId()));
@@ -123,48 +95,43 @@ public class LoadSimulator {
                         // the run is shutting down; late offers are not driven
                     }
                 })
-                .on(EventTypes.TRIP_COMPLETED, event -> {
-                    completed.incrementAndGet();
-                    requestedAt.remove(event.aggregateId());
-                })
-                .on(EventTypes.TRIP_UNMATCHED, event -> {
-                    unmatched.incrementAndGet();
-                    requestedAt.remove(event.aggregateId());
-                })
-                .on(EventTypes.TRIP_CANCELLED, event -> {
-                    cancelled.incrementAndGet();
-                    requestedAt.remove(event.aggregateId());
-                });
+                .on(EventTypes.TRIP_ACCEPTED, event ->
+                        metrics.tripAccepted(event.aggregateId(), event.occurredAt()))
+                .on(EventTypes.TRIP_COMPLETED, event ->
+                        metrics.tripCompleted(event.aggregateId()))
+                .on(EventTypes.TRIP_UNMATCHED, event ->
+                        metrics.tripUnmatched(event.aggregateId()))
+                .on(EventTypes.TRIP_CANCELLED, event ->
+                        metrics.tripCancelled(event.aggregateId()));
     }
 
+    @Override
     public void run() throws Exception {
-        log.info("load scenario: drivers={} gpsInterval={}s tripRate={}/min duration={}min",
-                drivers, gpsIntervalSeconds, tripRatePerMinute, durationMinutes);
+        log.info("load scenario: drivers={} gpsInterval={}s tripRate={}/min duration={}min "
+                        + "seed={} driverRejectRate={} riderCancelRate={}",
+                fleet.size(), gpsIntervalSeconds, tripRatePerMinute, durationMinutes,
+                fleet.seed(), driverRejectRate, riderCancelRate);
 
-        riderToken = objectMapper.readTree(gateway.post().uri("/auth/login")
-                        .header("Content-Type", "application/json")
-                        .body(Map.of("username", riderUsername, "password", riderPassword))
-                        .retrieve().body(String.class))
-                .get("token").asText();
+        riderToken = client.login(settings.riderUsername, settings.riderPassword).token();
 
         offerExecutor = Executors.newFixedThreadPool(64);
         presenceExecutor = Executors.newFixedThreadPool(64);
         scheduler = Executors.newScheduledThreadPool(2);
+        try {
+            bringDriversOnline();
+            Thread.sleep(3000);
 
-        bringDriversOnline();
-        gridSide = Math.max(1, (int) Math.ceil(Math.sqrt(driverIds.size())));
-        Thread.sleep(3000);
+            scheduler.scheduleAtFixedRate(this::sendPositions, 0, gpsIntervalSeconds, TimeUnit.SECONDS);
+            scheduler.scheduleAtFixedRate(this::createTrip, 0,
+                    60_000 / Math.max(1, tripRatePerMinute), TimeUnit.MILLISECONDS);
 
-        scheduler.scheduleAtFixedRate(this::sendPositions, 0, gpsIntervalSeconds, TimeUnit.SECONDS);
-        scheduler.scheduleAtFixedRate(this::createTrip, 0,
-                60_000 / Math.max(1, tripRatePerMinute), TimeUnit.MILLISECONDS);
-
-        Thread.sleep((long) (durationMinutes * 60_000));
-        scheduler.shutdownNow();
-        offerExecutor.shutdown();
-        presenceExecutor.shutdown();
-        offerExecutor.awaitTermination(15, TimeUnit.SECONDS);
-
+            Thread.sleep((long) (durationMinutes * 60_000));
+        } finally {
+            scheduler.shutdownNow();
+            offerExecutor.shutdown();
+            presenceExecutor.shutdown();
+            offerExecutor.awaitTermination(15, TimeUnit.SECONDS);
+        }
         printMetrics();
     }
 
@@ -175,64 +142,43 @@ public class LoadSimulator {
     }
 
     private void bringDriversOnline() throws Exception {
-        List<Future<?>> futures = new ArrayList<>(drivers);
-        for (int i = 0; i < drivers; i++) {
-            String driverId = "sim-driver-" + i;
-            driverIds.add(driverId);
+        List<Future<?>> futures = new ArrayList<>(fleet.size());
+        for (String driverId : fleet.driverIds()) {
             futures.add(presenceExecutor.submit(() -> bringOnline(driverId)));
         }
         for (Future<?> future : futures) {
             future.get(60, TimeUnit.SECONDS);
         }
-        log.info("{} drivers online", drivers);
+        log.info("{} drivers online", fleet.size());
     }
 
     private void bringOnline(String driverId) {
         try {
-            locationClient.post().uri("/drivers/" + driverId + "/presence")
-                    .header(InternalHeaders.USER_ID, driverId)
-                    .header(InternalHeaders.DRIVER_ID, driverId)
-                    .header(InternalHeaders.ROLE, Roles.DRIVER)
-                    .header("Content-Type", "application/json")
-                    .body(Map.of("online", true, "cityId", cityId))
-                    .retrieve()
-                    .toBodilessEntity();
+            client.setPresenceDirect(driverId, settings.cityId);
         } catch (Exception e) {
             log.warn("presence failed for {}: {}", driverId, e.getMessage());
         }
     }
 
     private void sendPositions() {
+        Instant now = clock.instant();
+        long tick = gpsTick++;
         long sent = 0;
-        for (int i = 0; i < driverIds.size(); i++) {
-            String driverId = driverIds.get(i);
-            int x = i % gridSide;
-            int y = i / gridSide;
-            double lat = pickupLat + (x - gridSide / 2.0) * 0.002
-                    + ThreadLocalRandom.current().nextDouble(-0.0005, 0.0005);
-            double lng = pickupLng + (y - gridSide / 2.0) * 0.002
-                    + ThreadLocalRandom.current().nextDouble(-0.0005, 0.0005);
+        for (int i = 0; i < fleet.size(); i++) {
             try {
-                kafkaTemplate.send(Topics.DRIVER_POSITIONS, driverId, objectMapper.writeValueAsString(
-                        new DriverPositionPayload(driverId, cityId, lat, lng, Instant.now())));
+                client.publishPosition(fleet.positionAt(i, tick, now));
                 sent++;
             } catch (Exception e) {
-                log.warn("position send failed for {}: {}", driverId, e.getMessage());
+                log.warn("position send failed for {}: {}", fleet.driverIds().get(i), e.getMessage());
             }
         }
-        gpsSent.addAndGet(sent);
+        metrics.positionsSent(sent);
     }
 
     private void createTrip() {
         try {
-            gateway.post().uri("/trips")
-                    .header("Authorization", "Bearer " + riderToken)
-                    .header("Content-Type", "application/json")
-                    .body(Map.of("cityId", cityId,
-                            "pickupLat", pickupLat, "pickupLng", pickupLng,
-                            "dropoffLat", dropoffLat, "dropoffLng", dropoffLng))
-                    .retrieve()
-                    .toBodilessEntity();
+            client.createTrip(riderToken, new RideGoClient.TripRequest(
+                    settings.cityId, pickupLat, pickupLng, dropoffLat, dropoffLng));
         } catch (Exception e) {
             log.warn("trip creation failed: {}", e.getMessage());
         }
@@ -240,16 +186,30 @@ public class LoadSimulator {
 
     private void drive(String offerId, String tripId, String driverId) {
         try {
-            if (!postDriver(dispatchClient, "/offers/" + offerId + "/accept", driverId)) {
-                acceptFailures.incrementAndGet();
+            if (fleet.chance(tripId + ":" + offerId, SALT_REJECT, driverRejectRate)) {
+                metrics.driverRejected();
+                client.rejectOfferDirect(offerId, driverId);
                 return;
             }
+
+            metrics.acceptSent(tripId, clock.instant());
+            if (!client.acceptOfferDirect(offerId, driverId)) {
+                metrics.acceptFailed(tripId);
+                return;
+            }
+
+            if (fleet.chance(tripId, SALT_CANCEL, riderCancelRate)) {
+                Thread.sleep(500);
+                client.cancel(riderToken, tripId, "rider_cancel_sim");
+                return;
+            }
+
             Thread.sleep(1000);
-            postDriver(tripClient, "/trips/" + tripId + "/arrive", driverId);
+            client.arriveDirect(tripId, driverId);
             Thread.sleep(1000);
-            postDriver(tripClient, "/trips/" + tripId + "/start", driverId);
+            client.startDirect(tripId, driverId);
             Thread.sleep(inProgressSeconds * 1000L);
-            postDriver(tripClient, "/trips/" + tripId + "/complete", driverId);
+            client.completeDirect(tripId, driverId);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         } catch (Exception e) {
@@ -257,41 +217,16 @@ public class LoadSimulator {
         }
     }
 
-    private boolean postDriver(RestClient client, String path, String driverId) {
-        try {
-            client.post().uri(path)
-                    .header(InternalHeaders.USER_ID, driverId)
-                    .header(InternalHeaders.DRIVER_ID, driverId)
-                    .header(InternalHeaders.ROLE, Roles.DRIVER)
-                    .header("Content-Type", "application/json")
-                    .body(Map.of())
-                    .retrieve()
-                    .toBodilessEntity();
-            return true;
-        } catch (Exception e) {
-            return false;
-        }
-    }
-
     private void printMetrics() {
-        long created = tripsCreated.get();
-        long completedCount = completed.get();
-        long unmatchedCount = unmatched.get();
-        long cancelledCount = cancelled.get();
-        double matchRate = created == 0 ? 0 : (double) completedCount / created;
-
-        List<Long> latencies;
-        synchronized (matchLatenciesMs) {
-            latencies = new ArrayList<>(matchLatenciesMs);
-        }
-        Collections.sort(latencies);
-        long p95 = latencies.isEmpty() ? -1 : latencies.get((int) Math.min(latencies.size() - 1,
-                Math.ceil(latencies.size() * 0.95) - 1));
-
-        log.info("LOAD RESULT drivers={} gpsSent={} tripsCreated={} offers={} completed={} "
-                        + "unmatched={} cancelled={} acceptFailures={} matchRate={} p95MatchLatencyMs={}",
-                drivers, gpsSent.get(), created, offers.get(), completedCount,
-                unmatchedCount, cancelledCount, acceptFailures.get(),
-                String.format("%.3f", matchRate), p95);
+        RunMetrics.Snapshot snapshot = metrics.snapshot();
+        log.info("LOAD RESULT drivers={} gpsSent={} tripsRequested={} offers={} completed={} "
+                        + "unmatched={} cancelled={} rejected={} acceptFailures={} "
+                        + "matchRate={} completionRate={} p95MatchLatencyMs={} p95AcceptToEventMs={}",
+                fleet.size(), snapshot.positionsSent(), snapshot.tripsRequested(), snapshot.offers(),
+                snapshot.completed(), snapshot.unmatched(), snapshot.cancelled(), snapshot.rejected(),
+                snapshot.acceptFailures(),
+                String.format("%.3f", snapshot.matchRate()),
+                String.format("%.3f", snapshot.completionRate()),
+                snapshot.p95MatchLatencyMs(), snapshot.p95AcceptToEventMs());
     }
 }
