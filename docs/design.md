@@ -315,7 +315,7 @@ ridego/
 - 单元测试：Trip 状态机合法 / 非法转移、司机可用性转移、Offer 选择与排除逻辑、事件信封序列化、事件消费者路由与去重。
 - 集成测试：每服务 Testcontainers（PG / Redis / Kafka）；覆盖 outbox 投递、幂等消费、并发抢占。
 - 端到端：仿真器按第 7 节场景运行并断言验收基线。
-- 合同：`libs/contracts` 的事件信封与事件类型有 schema 测试，防止生产者 / 消费者漂移。
+- 合同：`libs/contracts` 用固定 JSON 夹具覆盖全部 `EventTypes` 与 payload 的双向编解码、`Topics` 主题名与未知事件容忍，防止生产者 / 消费者漂移。
 
 ## 11. 已知取舍与风险
 
