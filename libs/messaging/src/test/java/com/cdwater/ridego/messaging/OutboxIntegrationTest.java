@@ -67,6 +67,7 @@ class OutboxIntegrationTest {
                     payload jsonb NOT NULL,
                     occurred_at timestamptz NOT NULL,
                     published_at timestamptz,
+                    parked_at timestamptz,
                     attempts integer NOT NULL DEFAULT 0
                 )
                 """);
@@ -90,7 +91,7 @@ class OutboxIntegrationTest {
                 new TripRequestedPayload("trip-1", "rider-1", "city-1",
                         31.2304, 121.4737, 31.24, 121.49));
 
-        OutboxRelay relay = new OutboxRelay(outbox, kafkaTemplate());
+        OutboxRelay relay = new OutboxRelay(outbox, kafkaTemplate(), 10);
         relay.relay();
 
         try (KafkaConsumer<String, String> consumer = consumer()) {
@@ -140,18 +141,81 @@ class OutboxIntegrationTest {
             }
         };
 
-        new OutboxRelay(outbox, failing).relay();
+        new OutboxRelay(outbox, failing, 10).relay();
 
         Map<String, Object> row = jdbc.queryForMap("SELECT attempts, published_at FROM outbox");
         assertEquals(1, ((Number) row.get("attempts")).intValue());
         assertNull(row.get("published_at"));
     }
 
+    @Test
+    void poisonRowParksAfterCeilingAndSuccessorPublishes() {
+        OutboxRepository outbox = new OutboxRepository(jdbc, codec);
+        outbox.append("trip.events.v1", "trip-poison", "city-1", EventTypes.TRIP_REQUESTED,
+                new TripRequestedPayload("trip-poison", "rider-1", "city-1",
+                        31.2304, 121.4737, 31.24, 121.49));
+        outbox.append("trip.events.v1", "trip-good", "city-1", EventTypes.TRIP_REQUESTED,
+                new TripRequestedPayload("trip-good", "rider-1", "city-1",
+                        31.2304, 121.4737, 31.24, 121.49));
+
+        OutboxRelay relay = new OutboxRelay(outbox, failingForKey("trip-poison"), 2);
+
+        relay.relay();
+
+        assertEquals(1, attempts("trip-poison"));
+        assertNull(parkedAt("trip-poison"));
+        assertNull(publishedAt("trip-good"));
+
+        relay.relay();
+
+        assertEquals(2, attempts("trip-poison"));
+        assertNotNull(parkedAt("trip-poison"));
+        assertNotNull(publishedAt("trip-good"));
+
+        relay.relay();
+
+        assertEquals(2, attempts("trip-poison"));
+    }
+
+    private int attempts(String key) {
+        return jdbc.queryForObject(
+                "SELECT attempts FROM outbox WHERE event_key = ?", Integer.class, key);
+    }
+
+    private Object parkedAt(String key) {
+        return jdbc.queryForObject(
+                "SELECT parked_at FROM outbox WHERE event_key = ?", Object.class, key);
+    }
+
+    private Object publishedAt(String key) {
+        return jdbc.queryForObject(
+                "SELECT published_at FROM outbox WHERE event_key = ?", Object.class, key);
+    }
+
+    private KafkaTemplate<String, String> failingForKey(String poisonKey) {
+        DefaultKafkaProducerFactory<String, String> factory =
+                new DefaultKafkaProducerFactory<>(producerConfig());
+        return new KafkaTemplate<>(factory) {
+            @Override
+            public CompletableFuture<org.springframework.kafka.support.SendResult<String, String>> send(
+                    String topic, String key, String data) {
+                if (poisonKey.equals(key)) {
+                    return CompletableFuture.failedFuture(new RuntimeException("poison"));
+                }
+                return super.send(topic, key, data);
+            }
+        };
+    }
+
     private KafkaTemplate<String, String> kafkaTemplate() {
-        return new KafkaTemplate<>(new DefaultKafkaProducerFactory<>(Map.<String, Object>of(
+        return new KafkaTemplate<>(new DefaultKafkaProducerFactory<>(producerConfig()));
+    }
+
+    private Map<String, Object> producerConfig() {
+        return Map.of(
                 ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, KAFKA.getBootstrapServers(),
                 ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class,
-                ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class)));
+                ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
     }
 
     private KafkaConsumer<String, String> consumer() {

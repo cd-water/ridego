@@ -13,10 +13,17 @@ public class OutboxRelay {
 
     private final OutboxRepository outbox;
     private final KafkaTemplate<String, String> kafkaTemplate;
+    private final int maxAttempts;
 
-    public OutboxRelay(OutboxRepository outbox, KafkaTemplate<String, String> kafkaTemplate) {
+    public OutboxRelay(OutboxRepository outbox,
+                       KafkaTemplate<String, String> kafkaTemplate,
+                       int maxAttempts) {
+        if (maxAttempts < 1) {
+            throw new IllegalArgumentException("maxAttempts must be positive");
+        }
         this.outbox = outbox;
         this.kafkaTemplate = kafkaTemplate;
+        this.maxAttempts = maxAttempts;
     }
 
     @Scheduled(fixedDelayString = "${ridego.outbox.poll-interval-ms:500}")
@@ -27,9 +34,16 @@ public class OutboxRelay {
                         .get(5, TimeUnit.SECONDS);
                 outbox.markPublished(row.id());
             } catch (Exception e) {
-                outbox.markFailed(row.id());
-                log.warn("outbox publish failed for id={}, will retry", row.id(), e);
-                return;
+                int attempts = outbox.markFailed(row.id());
+                if (attempts >= maxAttempts) {
+                    outbox.markParked(row.id());
+                    log.error("outbox row id={} topic={} parked after {} attempts",
+                            row.id(), row.topic(), attempts, e);
+                } else {
+                    log.warn("outbox publish failed for id={} attempt={}, will retry",
+                            row.id(), attempts, e);
+                    return;
+                }
             }
         }
     }

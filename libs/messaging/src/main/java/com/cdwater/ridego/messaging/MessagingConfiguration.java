@@ -2,6 +2,7 @@ package com.cdwater.ridego.messaging;
 
 import com.cdwater.ridego.contracts.EventEnvelopeCodec;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -27,8 +28,9 @@ public class MessagingConfiguration {
 
     @Bean
     public OutboxRelay outboxRelay(OutboxRepository outbox,
-                                   KafkaTemplate<String, String> kafkaTemplate) {
-        return new OutboxRelay(outbox, kafkaTemplate);
+                                   KafkaTemplate<String, String> kafkaTemplate,
+                                   @Value("${ridego.outbox.max-attempts:10}") int maxAttempts) {
+        return new OutboxRelay(outbox, kafkaTemplate, maxAttempts);
     }
 
     @Bean

@@ -1,9 +1,9 @@
 package com.cdwater.ridego.trip.outbox;
 
 import com.cdwater.ridego.contracts.EventTypes;
+import com.cdwater.ridego.messaging.EventTypeCounters;
 import com.cdwater.ridego.trip.lifecycle.TripEvent;
 import com.cdwater.ridego.trip.lifecycle.TripEventSink;
-import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 
 import java.util.Map;
@@ -11,23 +11,20 @@ import java.util.Map;
 public class MetricsTripEventSink implements TripEventSink {
 
     private final TripEventSink delegate;
-    private final Map<String, Counter> counters;
+    private final EventTypeCounters counters;
 
     public MetricsTripEventSink(TripEventSink delegate, MeterRegistry meterRegistry) {
         this.delegate = delegate;
-        this.counters = Map.of(
-                EventTypes.TRIP_REQUESTED, Counter.builder("ridego.trips.requested").register(meterRegistry),
-                EventTypes.TRIP_COMPLETED, Counter.builder("ridego.trips.completed").register(meterRegistry),
-                EventTypes.TRIP_CANCELLED, Counter.builder("ridego.trips.cancelled").register(meterRegistry),
-                EventTypes.TRIP_UNMATCHED, Counter.builder("ridego.trips.unmatched").register(meterRegistry));
+        this.counters = new EventTypeCounters(meterRegistry, Map.of(
+                EventTypes.TRIP_REQUESTED, "ridego.trips.requested",
+                EventTypes.TRIP_COMPLETED, "ridego.trips.completed",
+                EventTypes.TRIP_CANCELLED, "ridego.trips.cancelled",
+                EventTypes.TRIP_UNMATCHED, "ridego.trips.unmatched"));
     }
 
     @Override
     public void append(TripEvent event) {
         delegate.append(event);
-        Counter counter = counters.get(event.type());
-        if (counter != null) {
-            counter.increment();
-        }
+        counters.increment(event.type());
     }
 }

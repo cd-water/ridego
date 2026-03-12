@@ -35,7 +35,7 @@ public class OutboxRepository {
         return jdbc.query("""
                         SELECT id, topic, event_key, payload::text AS payload
                         FROM outbox
-                        WHERE published_at IS NULL
+                        WHERE published_at IS NULL AND parked_at IS NULL
                         ORDER BY id
                         LIMIT ?
                         """,
@@ -51,8 +51,18 @@ public class OutboxRepository {
         jdbc.update("UPDATE outbox SET published_at = now() WHERE id = ?", id);
     }
 
-    public void markFailed(long id) {
-        jdbc.update("UPDATE outbox SET attempts = attempts + 1 WHERE id = ?", id);
+    /**
+     * @return the new attempt count
+     */
+    public int markFailed(long id) {
+        Integer attempts = jdbc.queryForObject(
+                "UPDATE outbox SET attempts = attempts + 1 WHERE id = ? RETURNING attempts",
+                Integer.class, id);
+        return attempts == null ? 0 : attempts;
+    }
+
+    public void markParked(long id) {
+        jdbc.update("UPDATE outbox SET parked_at = now() WHERE id = ?", id);
     }
 
     public record OutboxRow(long id, String topic, String key, String payload) {

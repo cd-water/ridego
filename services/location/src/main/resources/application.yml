@@ -33,6 +33,9 @@ ridego:
     heartbeat-scan-ms: ${HEARTBEAT_SCAN_MS:10000}
   trail:
     flush-ms: ${TRAIL_FLUSH_MS:1000}
+  outbox:
+    poll-interval-ms: ${OUTBOX_POLL_INTERVAL_MS:500}
+    max-attempts: ${OUTBOX_MAX_ATTEMPTS:10}
 
 management:
   endpoints:

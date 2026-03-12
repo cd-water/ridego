@@ -23,6 +23,7 @@ spring:
 ridego:
   outbox:
     poll-interval-ms: ${OUTBOX_POLL_INTERVAL_MS:500}
+    max-attempts: ${OUTBOX_MAX_ATTEMPTS:10}
 
 management:
   endpoints:

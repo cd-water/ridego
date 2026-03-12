@@ -111,4 +111,13 @@ docker exec -it ridego-postgres psql -U ridepostgres -d ridego_dispatch \
 # 轨迹
 docker exec -it ridego-postgres psql -U ridepostgres -d ridego_location \
   -c "SELECT count(*), count(DISTINCT trip_id) FROM trip_positions;"
+
+# 被隔离的 outbox 行（达到 max-attempts 后不再自动重试）
+# 依次替换 database：ridego_trip / ridego_dispatch / ridego_billing / ridego_location
+docker exec -it ridego-postgres psql -U ridepostgres -d ridego_trip \
+  -c "SELECT id, topic, event_key, attempts, occurred_at FROM outbox WHERE parked_at IS NOT NULL ORDER BY id;"
+
+# 人工修复根因后重新投递该行
+docker exec -it ridego-postgres psql -U ridepostgres -d ridego_trip \
+  -c "UPDATE outbox SET parked_at = NULL, attempts = 0 WHERE id = <id>;"
 ```

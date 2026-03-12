@@ -1,26 +1,26 @@
 package com.cdwater.ridego.billing.invoice;
 
 import com.cdwater.ridego.contracts.EventTypes;
-import io.micrometer.core.instrument.Counter;
+import com.cdwater.ridego.messaging.EventTypeCounters;
 import io.micrometer.core.instrument.MeterRegistry;
 
+import java.util.Map;
 import java.util.UUID;
 
 public class MetricsInvoiceEventSink implements InvoiceEventSink {
 
     private final InvoiceEventSink delegate;
-    private final Counter invoicesPaid;
+    private final EventTypeCounters counters;
 
     public MetricsInvoiceEventSink(InvoiceEventSink delegate, MeterRegistry meterRegistry) {
         this.delegate = delegate;
-        this.invoicesPaid = Counter.builder("ridego.invoices.paid").register(meterRegistry);
+        this.counters = new EventTypeCounters(meterRegistry, Map.of(
+                EventTypes.INVOICE_PAID, "ridego.invoices.paid"));
     }
 
     @Override
     public void append(String eventType, UUID tripId, Object payload) {
         delegate.append(eventType, tripId, payload);
-        if (EventTypes.INVOICE_PAID.equals(eventType)) {
-            invoicesPaid.increment();
-        }
+        counters.increment(eventType);
     }
 }
