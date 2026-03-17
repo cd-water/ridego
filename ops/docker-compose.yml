@@ -72,21 +72,182 @@ services:
     networks:
       - ridego-network
 
+  identity:
+    image: eclipse-temurin:21-jre
+    container_name: ridego-identity
+    profiles: ["app"]
+    restart: unless-stopped
+    command: ["java", "-jar", "/app/app.jar"]
+    environment:
+      IDENTITY_DB_URL: jdbc:postgresql://postgres:5432/${IDENTITY_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+    ports:
+      - "8081:8081"
+    volumes:
+      - ../services/identity/target/identity-0.0.1-SNAPSHOT.jar:/app/app.jar:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - ridego-network
+
+  trip:
+    image: eclipse-temurin:21-jre
+    container_name: ridego-trip
+    profiles: ["app"]
+    restart: unless-stopped
+    command: ["java", "-jar", "/app/app.jar"]
+    environment:
+      TRIP_DB_URL: jdbc:postgresql://postgres:5432/${TRIP_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      MATCHING_WINDOW_SECONDS: "20"
+    ports:
+      - "8082:8082"
+    volumes:
+      - ../services/trip/target/trip-0.0.1-SNAPSHOT.jar:/app/app.jar:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+      - ridego-network
+
+  dispatch:
+    image: eclipse-temurin:21-jre
+    container_name: ridego-dispatch
+    profiles: ["app"]
+    restart: unless-stopped
+    command: ["java", "-jar", "/app/app.jar"]
+    environment:
+      DISPATCH_DB_URL: jdbc:postgresql://postgres:5432/${DISPATCH_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      REDIS_HOST: redis
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      LOCATION_URL: http://location:8084
+    ports:
+      - "8083:8083"
+    volumes:
+      - ../services/dispatch/target/dispatch-0.0.1-SNAPSHOT.jar:/app/app.jar:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+      - ridego-network
+
+  location:
+    image: eclipse-temurin:21-jre
+    container_name: ridego-location
+    profiles: ["app"]
+    restart: unless-stopped
+    command: ["java", "-jar", "/app/app.jar"]
+    environment:
+      LOCATION_DB_URL: jdbc:postgresql://postgres:5432/${LOCATION_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      REDIS_HOST: redis
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    ports:
+      - "8084:8084"
+    volumes:
+      - ../services/location/target/location-0.0.1-SNAPSHOT.jar:/app/app.jar:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+      - ridego-network
+
+  billing:
+    image: eclipse-temurin:21-jre
+    container_name: ridego-billing
+    profiles: ["app"]
+    restart: unless-stopped
+    command: ["java", "-jar", "/app/app.jar"]
+    environment:
+      BILLING_DB_URL: jdbc:postgresql://postgres:5432/${BILLING_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    ports:
+      - "8085:8085"
+    volumes:
+      - ../services/billing/target/billing-0.0.1-SNAPSHOT.jar:/app/app.jar:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+      - ridego-network
+
+  gateway:
+    image: eclipse-temurin:21-jre
+    container_name: ridego-gateway
+    profiles: ["app"]
+    restart: unless-stopped
+    command: ["java", "-jar", "/app/app.jar"]
+    environment:
+      IDENTITY_URI: http://identity:8081
+      TRIP_URI: http://trip:8082
+      DISPATCH_URI: http://dispatch:8083
+      LOCATION_URI: http://location:8084
+      BILLING_URI: http://billing:8085
+      JWT_SECRET: ${JWT_SECRET}
+    ports:
+      - "8080:8080"
+    volumes:
+      - ../services/gateway/target/gateway-0.0.1-SNAPSHOT.jar:/app/app.jar:ro
+    networks:
+      - ridego-network
+
+  simulator:
+    image: eclipse-temurin:21-jre
+    container_name: ridego-simulator
+    profiles: ["simulator"]
+    restart: "no"
+    command: ["java", "-jar", "/app/app.jar"]
+    environment:
+      GATEWAY_URL: http://gateway:8080/api/v1
+      LOCATION_URL: http://location:8084
+      DISPATCH_URL: http://dispatch:8083
+      TRIP_URL: http://trip:8082
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    volumes:
+      - ../simulator/target/simulator-0.0.1-SNAPSHOT.jar:/app/app.jar:ro
+    depends_on:
+      - gateway
+    networks:
+      - ridego-network
+
   prometheus:
     image: prom/prometheus:v3.14.0
     container_name: ridego-prometheus
     profiles: ["monitoring"]
     restart: unless-stopped
     command:
-      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--config.file=/etc/prometheus/${PROM_CONFIG:-prometheus.yml}"
       - "--storage.tsdb.path=/prometheus"
     ports:
       - "${PROMETHEUS_PORT}:9090"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
-      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - ./prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - ./prometheus:/etc/prometheus:ro
       - prometheus-data:/prometheus
     networks:
       - ridego-network

@@ -5,6 +5,7 @@
 - Java 21
 - Docker + Docker Compose
 - 本地镜像：`postgres:16.15`、`redis:7.4.11`、`apache/kafka:4.1.2`（监控：`prom/prometheus:v3.14.0`、`grafana/grafana:13.2.2`）
+- 可选（Compose app 模式）：`eclipse-temurin:21-jre`
 
 ## 1. 基础设施
 
@@ -24,6 +25,21 @@ docker compose -f ops/docker-compose.yml down -v
 
 Kafka 已关闭 broker 自动建 topic；所有 topic 由各服务启动时的 `NewTopic` 创建。
 
+可复现的容器模式（与宿主 JVM 模式**互斥**，端口相同；先构建 jar）：
+
+```bash
+# 六个服务 + 基础设施
+docker compose -f ops/docker-compose.yml --profile app up -d
+
+# 连同监控，Prometheus 改用容器 DNS 抓取
+PROM_CONFIG=prometheus-app.yml \
+  docker compose -f ops/docker-compose.yml --profile app --profile monitoring up -d
+
+# 服务健康后运行仿真器
+docker compose -f ops/docker-compose.yml --profile app --profile simulator \
+  run --rm -e SIM_SCENARIO=happy simulator
+```
+
 ## 2. 构建与测试
 
 ```bash
@@ -36,12 +52,23 @@ TESTCONTAINERS_RYUK_DISABLED=true bash ./mvnw test
 ## 3. 启动服务
 
 ```bash
-java -jar services/identity/target/identity-0.0.1-SNAPSHOT.jar
-java -jar services/trip/target/trip-0.0.1-SNAPSHOT.jar
-java -jar services/dispatch/target/dispatch-0.0.1-SNAPSHOT.jar
-java -jar services/location/target/location-0.0.1-SNAPSHOT.jar
-java -jar services/billing/target/billing-0.0.1-SNAPSHOT.jar
-java -jar services/gateway/target/gateway-0.0.1-SNAPSHOT.jar
+# 启动基础设施 + 构建 + 后台启动六个服务 + 等待健康
+bash ops/run-local.sh up
+
+# 查看状态 / 停止应用（保留基础设施）
+bash ops/run-local.sh status
+bash ops/run-local.sh down
+```
+
+脚本从 `services/<name>/target/` 读取 jar，日志与 PID 在 `ops/.run/`；trip 默认以 `MATCHING_WINDOW_SECONDS=20` 启动（可用环境变量覆盖）。
+
+手动启动（等价于脚本）：
+
+```bash
+docker compose -f ops/docker-compose.yml up -d --wait
+bash ./mvnw -DskipTests package
+MATCHING_WINDOW_SECONDS=20 java -jar services/trip/target/trip-0.0.1-SNAPSHOT.jar
+# 其余服务同理：identity / dispatch / location / billing / gateway
 ```
 
 | 服务 | 端口 |
@@ -93,7 +120,7 @@ SIM_SEED=42 SIM_DRIVER_REJECT_RATE=0.1 SIM_RIDER_CANCEL_RATE=0.05 \
 - 告警规则：`ops/prometheus/alerts.yml`
 - 业务指标：`ridego_trips_*`、`ridego_offers_*`、`ridego_positions_ingested_total`、`ridego_invoices_paid_total`
 
-Prometheus 通过 `host.docker.internal` 抓取宿主机上运行的服务（Compose 已配置 `host-gateway`）。
+默认 `prometheus.yml` 通过 `host.docker.internal` 抓取宿主机上运行的服务（Compose 已配置 `host-gateway`）；app 模式设置 `PROM_CONFIG=prometheus-app.yml`，改用容器 DNS 抓取，避免同一实例被两套目标重复抓取。
 
 ## 6. 常用排查
 
