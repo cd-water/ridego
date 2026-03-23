@@ -3,6 +3,8 @@ package com.cdwater.ridego.messaging;
 import com.cdwater.ridego.contracts.EventEnvelope;
 import com.cdwater.ridego.contracts.EventEnvelopeCodec;
 import com.cdwater.ridego.contracts.EventTypes;
+import com.cdwater.ridego.contracts.TripCompletedPayload;
+import com.cdwater.ridego.contracts.TripLifecyclePayload;
 import com.cdwater.ridego.contracts.TripRequestedPayload;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
@@ -91,7 +93,7 @@ class OutboxIntegrationTest {
                 new TripRequestedPayload("trip-1", "rider-1", "city-1",
                         31.2304, 121.4737, 31.24, 121.49));
 
-        OutboxRelay relay = new OutboxRelay(outbox, kafkaTemplate(), 10);
+        OutboxRelay relay = new OutboxRelay(outbox, kafkaTemplate(), 10, 100, 4);
         relay.relay();
 
         try (KafkaConsumer<String, String> consumer = consumer()) {
@@ -141,7 +143,7 @@ class OutboxIntegrationTest {
             }
         };
 
-        new OutboxRelay(outbox, failing, 10).relay();
+        new OutboxRelay(outbox, failing, 10, 100, 4).relay();
 
         Map<String, Object> row = jdbc.queryForMap("SELECT attempts, published_at FROM outbox");
         assertEquals(1, ((Number) row.get("attempts")).intValue());
@@ -158,13 +160,12 @@ class OutboxIntegrationTest {
                 new TripRequestedPayload("trip-good", "rider-1", "city-1",
                         31.2304, 121.4737, 31.24, 121.49));
 
-        OutboxRelay relay = new OutboxRelay(outbox, failingForKey("trip-poison"), 2);
+        OutboxRelay relay = new OutboxRelay(outbox, failingForKey("trip-poison"), 2, 100, 4);
 
         relay.relay();
 
         assertEquals(1, attempts("trip-poison"));
         assertNull(parkedAt("trip-poison"));
-        assertNull(publishedAt("trip-good"));
 
         relay.relay();
 
@@ -175,6 +176,29 @@ class OutboxIntegrationTest {
         relay.relay();
 
         assertEquals(2, attempts("trip-poison"));
+    }
+
+    @Test
+    void failedRowStopsLaterRowsOfTheSameKey() {
+        OutboxRepository outbox = new OutboxRepository(jdbc, codec);
+        outbox.append("trip.events.v1", "trip-1", "city-1", EventTypes.TRIP_MATCHING_STARTED,
+                new TripLifecyclePayload("trip-1"));
+        outbox.append("trip.events.v1", "trip-1", "city-1", EventTypes.TRIP_COMPLETED,
+                new TripCompletedPayload("trip-1", "rider-1", "driver-1",
+                        Instant.parse("2026-11-13T10:05:00Z"), Instant.parse("2026-11-13T10:20:00Z"),
+                        31.2304, 121.4737, 31.24, 121.49));
+
+        new OutboxRelay(outbox, failingForKey("trip-1"), 10, 100, 4).relay();
+
+        Map<String, Object> rows = jdbc.queryForMap("""
+                SELECT count(*) FILTER (WHERE attempts = 1) AS attempted,
+                       count(*) FILTER (WHERE attempts = 0) AS untouched,
+                       count(*) FILTER (WHERE published_at IS NOT NULL) AS published
+                FROM outbox WHERE event_key = 'trip-1'
+                """);
+        assertEquals(1L, ((Number) rows.get("attempted")).longValue());
+        assertEquals(1L, ((Number) rows.get("untouched")).longValue());
+        assertEquals(0L, ((Number) rows.get("published")).longValue());
     }
 
     private int attempts(String key) {

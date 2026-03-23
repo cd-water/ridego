@@ -29,8 +29,10 @@ public class MessagingConfiguration {
     @Bean
     public OutboxRelay outboxRelay(OutboxRepository outbox,
                                    KafkaTemplate<String, String> kafkaTemplate,
-                                   @Value("${ridego.outbox.max-attempts:10}") int maxAttempts) {
-        return new OutboxRelay(outbox, kafkaTemplate, maxAttempts);
+                                   @Value("${ridego.outbox.max-attempts:10}") int maxAttempts,
+                                   @Value("${ridego.outbox.batch-size:500}") int batchSize,
+                                   @Value("${ridego.outbox.workers:8}") int workers) {
+        return new OutboxRelay(outbox, kafkaTemplate, maxAttempts, batchSize, workers);
     }
 
     @Bean

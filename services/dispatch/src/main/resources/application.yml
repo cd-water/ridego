@@ -10,6 +10,10 @@ spring:
     password: ${POSTGRES_PASSWORD:ridepostgres}
   flyway:
     enabled: true
+  task:
+    scheduling:
+      pool:
+        size: ${SCHEDULING_POOL_SIZE:4}
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9094}
     listener:
@@ -38,6 +42,8 @@ ridego:
   outbox:
     poll-interval-ms: ${OUTBOX_POLL_INTERVAL_MS:500}
     max-attempts: ${OUTBOX_MAX_ATTEMPTS:10}
+    batch-size: ${OUTBOX_BATCH_SIZE:500}
+    workers: ${OUTBOX_WORKERS:8}
 
 management:
   endpoints:

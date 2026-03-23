@@ -145,7 +145,7 @@ in_progress → completed
 ### 5.2 一致性
 
 - 写模型使用状态 CAS（`WHERE state = expected`）；`version` 单调递增，用于审计。状态变更与 outbox 记录在同一事务，先 save 后发事件。
-- outbox 轮询投递器每 500 ms 扫描未发布且未隔离的行；失败时递增 `attempts` 并暂停本批以保持同 key 顺序，达到 `ridego.outbox.max-attempts`（默认 10）后写入 `parked_at` 隔离该行并继续处理后续行；至少一次投递。
+- outbox 轮询投递器每 500 ms 扫描未发布且未隔离的行（`batch-size`，默认 500）；按事件 key 分组并行发送（`workers`，默认 8），同 key 严格有序；失败时递增 `attempts` 并暂停其余 key 的下一次发送，达到 `ridego.outbox.max-attempts`（默认 10）后写入 `parked_at` 隔离该行并继续；至少一次投递。各服务使用独立调度线程池，避免中继被心跳/扫描任务饿住。
 - 有副作用的消费者按 `eventId` 去重（`processed_events` 主键）；状态守卫型/天然幂等的消费者（Trip/Offer 意图、presence、轨迹注册）以幂等操作为准。
 - 司机分配：`dispatch` 的 PG 唯一约束（司机上只能有一条活跃 Offer / 活跃 Trip 引用）+ Redis `SET NX EX` 抢占键；两者都成功才发 Offer，失败方回滚。
 - 补偿：`TripAcceptRejected` 让 `dispatch` 释放司机；`TripCancelled` / `TripUnmatched` 让 `dispatch` 关闭未决 Offer。
